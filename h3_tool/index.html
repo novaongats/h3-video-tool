@@ -114,7 +114,8 @@
     </div>
 
     <label class="lbl">どんな動画にしたい？（日本語OK。セリフ・音・カメラの動きも書ける）</label>
-    <textarea id="prompt" placeholder="例：桜並木を歩く白い猫。カメラはゆっくり猫を追いかける。BGMは穏やかなピアノ。風で花びらが舞う。"></textarea>
+    <textarea id="prompt" placeholder="例：桜並木を歩く白い猫。カメラはゆっくり猫を追いかける。BGMは穏やかなピアノ。風で花びらが舞う。" oninput="updatePromptHint()"></textarea>
+    <div class="hint" id="promptHint"></div>
 
     <label class="lbl">長さ：<b id="secLabel">5秒</b>（長いほど時間とお金がかかる）</label>
     <input type="range" id="seconds" min="4" max="15" value="5" oninput="updateSec()">
@@ -257,7 +258,20 @@ function setAspect(a) {
 function updateSec() {
   const s = $('seconds').value;
   $('secLabel').textContent = s + '秒';
-  $('costText').textContent = 'このサーバー(A100)での目安: 約' + Math.round(s * 3.5) + '〜' + Math.round(s * 5) + '円/本 + 起動時間ぶんのサーバー代';
+  $('costText').textContent = 'このサーバー(H100)での目安: 約' + Math.round(s * 3.5) + '〜' + Math.round(s * 5) + '円/本 + 起動時間ぶんのサーバー代';
+  updatePromptHint();
+}
+
+function updatePromptHint() {
+  const len = $('prompt').value.length;
+  const s = +$('seconds').value;
+  const range = s <= 6 ? '150〜400字' : '400〜900字';
+  const cuts = s <= 6 ? '2〜3個' : '4〜6個';
+  let msg = `現在 ${len}字｜${s}秒動画の目安: ${range}・カット${cuts}まで｜コツ: 重要なこと（スタイル・人物・場所）ほど先頭に書く`;
+  let color = '';
+  if (len > 1500) { msg += '｜⚠️ 長すぎると後半の指示が無視されがちです。要素をしぼるか秒数を増やして'; color = 'var(--warn)'; }
+  $('promptHint').textContent = msg;
+  $('promptHint').style.color = color;
 }
 updateSec();
 
