@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>H3かんたん動画メーカー 説明書</title>
+<style>
+  :root { --bg:#0f1117; --side:#161925; --card:#1a1d27; --card2:#232736; --tx:#e8eaf2; --sub:#9aa0b4; --ac:#6c5ce7; --ac2:#00cec9; --ok:#00b894; --ng:#ff7675; --warn:#fdcb6e; }
+  * { box-sizing:border-box; margin:0; padding:0; font-family:"Segoe UI","Hiragino Sans","Meiryo",sans-serif; }
+  body { background:var(--bg); color:var(--tx); min-height:100vh; display:flex; }
+  /* サイドメニュー */
+  nav { width:250px; min-width:250px; background:var(--side); min-height:100vh; padding:20px 12px; position:sticky; top:0; height:100vh; overflow-y:auto; border-right:1px solid #2a2e3f; }
+  nav h1 { font-size:16px; padding:0 10px 14px; border-bottom:1px solid #2a2e3f; margin-bottom:12px; line-height:1.5; }
+  nav h1 span { color:var(--ac2); }
+  .navitem { display:block; width:100%; text-align:left; background:none; border:none; color:var(--sub); padding:11px 12px; border-radius:9px; font-size:14px; cursor:pointer; margin-bottom:2px; line-height:1.4; }
+  .navitem:hover { background:var(--card2); color:var(--tx); }
+  .navitem.sel { background:var(--ac); color:#fff; font-weight:600; }
+  /* コンテンツ */
+  main { flex:1; padding:34px 40px 80px; max-width:860px; }
+  section { display:none; }
+  section.show { display:block; animation:fade .25s; }
+  @keyframes fade { from { opacity:0; transform:translateY(6px);} to { opacity:1; transform:none; } }
+  h2 { font-size:24px; margin-bottom:6px; }
+  h2 .em { color:var(--ac2); }
+  .lead { color:var(--sub); font-size:14px; margin-bottom:22px; }
+  h3 { font-size:17px; margin:26px 0 10px; color:var(--ac2); }
+  p, li { font-size:14.5px; line-height:1.9; color:var(--tx); }
+  ul, ol { padding-left:22px; margin:8px 0; }
+  .card { background:var(--card); border:1px solid #2a2e3f; border-radius:12px; padding:16px 18px; margin:14px 0; }
+  .warn { border-left:4px solid var(--warn); }
+  .danger { border-left:4px solid var(--ng); }
+  .good { border-left:4px solid var(--ok); }
+  table { width:100%; border-collapse:collapse; margin:12px 0; font-size:13.5px; }
+  th, td { border:1px solid #2a2e3f; padding:9px 11px; text-align:left; line-height:1.6; }
+  th { background:var(--card2); }
+  code, pre { background:#12141d; border:1px solid #2a2e3f; border-radius:6px; font-family:Consolas,monospace; }
+  code { padding:2px 6px; font-size:13px; color:var(--ac2); }
+  pre { padding:14px; font-size:13px; overflow-x:auto; margin:10px 0; white-space:pre-wrap; line-height:1.8; color:#cfd3e3; }
+  .step { display:flex; gap:12px; margin:12px 0; align-items:flex-start; }
+  .stepnum { background:var(--ac); color:#fff; min-width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; margin-top:2px; }
+  .kbd { background:var(--card2); border:1px solid #3a3f58; border-radius:5px; padding:1px 7px; font-size:12.5px; }
+  @media (max-width: 760px) {
+    body { flex-direction:column; }
+    nav { width:100%; height:auto; position:static; min-height:0; }
+    main { padding:20px 16px 60px; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <h1>🎬 H3かんたん動画メーカー<br><span>説明書</span></h1>
+  <button class="navitem sel" data-s="s1">🏠 このツールでできること</button>
+  <button class="navitem" data-s="s2">🔧 初期設定（最初の1回）</button>
+  <button class="navitem" data-s="s3">▶️ 基本の使い方</button>
+  <button class="navitem" data-s="s4">🎭 3つのモードの使い分け</button>
+  <button class="navitem" data-s="s5">✍️ プロンプトの書き方</button>
+  <button class="navitem" data-s="s6">🎙️ セリフ・音の設定</button>
+  <button class="navitem" data-s="s7">⚙️ 画質・こだわり設定</button>
+  <button class="navitem" data-s="s8">💰 料金の仕組み</button>
+  <button class="navitem" data-s="s9">🚨 困ったときは</button>
+  <button class="navitem" data-s="s10">📜 ルールとマナー</button>
+</nav>
+
+<main>
+
+<!-- 1 -->
+<section id="s1" class="show">
+  <h2>🏠 このツールで<span class="em">できること</span></h2>
+  <p class="lead">最新の動画生成AI「MiniMax H3」を、専門知識ゼロで使うためのツールです。</p>
+  <div class="card good">
+    <p><b>文章や画像から、音声つきの動画（4〜15秒）を作れます。</b></p>
+    <ul>
+      <li>🗣️ 日本語のセリフをしゃべらせられる（口の動きも自動で同期＝リップシンク）</li>
+      <li>🎵 BGM・効果音も同時に生成（あとから音を付ける作業が不要）</li>
+      <li>🖼️ 手持ちの写真・イラストを動かせる</li>
+      <li>👤 同じキャラクター・人物を複数の動画に登場させられる</li>
+    </ul>
+  </div>
+  <h3>仕組み（ざっくり）</h3>
+  <p>動画を作る計算は、自分のPCではなく<b>クラウドで借りた強力なGPUマシン</b>が行います。このツールはそのマシンの「起動・生成・停止」をボタン1つで代行します。マシンは使った時間だけ課金されるので、<b>使い終わったら止める</b>のが大事です（ツールが自動でやってくれます）。</p>
+  <div class="card">
+    <p>📁 作った動画はすべて、ツールのフォルダ内の <code>outputs</code> に自動保存されます。</p>
+  </div>
+</section>
+
+<!-- 2 -->
+<section id="s2">
+  <h2>🔧 初期設定<span class="em">（最初の1回だけ）</span></h2>
+  <p class="lead">所要5〜10分。2回目からは不要です。</p>
+  <div class="step"><div class="stepnum">1</div><div>
+    <p><b>Pythonを入れる</b>（動作に必要な無料ソフト）</p>
+    <p>python.org/downloads から黄色いボタンでダウンロード。インストール画面で<b>「Add python.exe to PATH」に必ずチェック</b>✅してから「Install Now」。</p>
+  </div></div>
+  <div class="step"><div class="stepnum">2</div><div>
+    <p><b>ツールのフォルダをPCに置く</b></p>
+    <p>デスクトップなど好きな場所でOK。ZIPでもらった場合は右クリック→「すべて展開」。</p>
+  </div></div>
+  <div class="step"><div class="stepnum">3</div><div>
+    <p><b>「H3かんたん動画メーカー.bat」をダブルクリック</b></p>
+    <p>黒い窓が開き、ブラウザで操作画面が自動で開きます。</p>
+  </div></div>
+  <div class="step"><div class="stepnum">4</div><div>
+    <p><b>APIキーを貼り付ける</b></p>
+    <p>初回は「APIキーを設定します」という画面が出ます。<b>管理者から教えてもらったキー</b>（rpa_ で始まる長い文字列）を貼って「保存してはじめる」。</p>
+  </div></div>
+  <div class="card danger">
+    <p>⚠️ APIキーは会社の利用料金に直結する「合鍵」です。<b>他の人に教えない・社外に出さない・SNSに貼らない</b>。</p>
+  </div>
+</section>
+
+<!-- 3 -->
+<section id="s3">
+  <h2>▶️ 基本の<span class="em">使い方</span></h2>
+  <p class="lead">毎回の流れは「起動 → 書く → 押す → 待つ」だけです。</p>
+  <div class="step"><div class="stepnum">1</div><div><p><b>batをダブルクリック</b>して画面を開く（黒い窓は使用中閉じない）</p></div></div>
+  <div class="step"><div class="stepnum">2</div><div><p><b>「どんな動画にしたい？」に内容を書く</b>（日本語OK。書き方のコツは「✍️プロンプトの書き方」参照）</p></div></div>
+  <div class="step"><div class="stepnum">3</div><div><p><b>長さ・画面の形・画質を選ぶ</b></p></div></div>
+  <div class="step"><div class="stepnum">4</div><div>
+    <p><b>「生成が終わったらサーバーを自動停止する」にチェック✅</b>（超重要！）</p>
+    <p>これで生成後に勝手に課金が止まります。他の人が生成中の場合は自動で譲り合うので気にしなくてOK。</p>
+  </div></div>
+  <div class="step"><div class="stepnum">5</div><div>
+    <p><b>🚀ボタンを押して待つ</b></p>
+    <p>サーバーが止まっていても自動で起動します（+2分）。5秒動画で約5分、15秒で約15分。画面に経過時間が出ます。</p>
+  </div></div>
+  <div class="step"><div class="stepnum">6</div><div><p><b>完成！</b> 画面で再生され、<code>outputs</code>フォルダにも保存済み。下の「これまでの作品」にも並びます。</p></div></div>
+  <div class="card warn">
+    <p>⚠️ 使い終わったら、画面上部が<b>「サーバー：停止中（課金なし）」</b>になっているか確認する習慣を。自動停止のチェックを外して生成した場合は「サーバー停止」ボタンを手で押してください。</p>
+  </div>
+</section>
+
+<!-- 4 -->
+<section id="s4">
+  <h2>🎭 3つのモードの<span class="em">使い分け</span></h2>
+  <p class="lead">画面上部のタブで切り替えます。</p>
+  <h3>📝 文章から（いちばん基本）</h3>
+  <p>文章だけで動画を作ります。自由度最大。プロンプトの書き方次第で映画のワンシーンのような映像も作れます。</p>
+  <h3>🖼️ 画像を動かす</h3>
+  <p>写真やイラストを1枚選ぶと、<b>その画像から始まる動画</b>になります。人物写真＋セリフでしゃべらせる、商品写真を回す、イラストに演技させる、など。</p>
+  <div class="card">
+    <ul>
+      <li>元画像は<b>高解像度・ピントが合っているもの</b>を（画像の質＝動画の質の上限）</li>
+      <li>プロンプトには「画像の説明」ではなく「<b>これから何が起きるか</b>」を書く</li>
+      <li>正面を向いた人物が最も安定と報告されています</li>
+    </ul>
+  </div>
+  <h3>👤 人物固定（シリーズもの向け）</h3>
+  <p>参照画像（1〜4枚）の人物・キャラの<b>見た目を保ったまま</b>、まったく別のシーンで動かせます。「同じキャラでいろんな動画を作りたい」ときはこれ。</p>
+  <div class="card warn">
+    <p>⚠️ このモードは生成に<b>通常の約3倍</b>時間がかかります。まず5秒でテストを。</p>
+  </div>
+</section>
+
+<!-- 5 -->
+<section id="s5">
+  <h2>✍️ プロンプトの<span class="em">書き方</span>（最重要）</h2>
+  <p class="lead">動画の質の8割はここで決まります。MiniMax公式ガイド準拠のコツです。</p>
+  <div class="card danger">
+    <p>❌ <b>ダメな例：</b>「かわいい猫の動画」<br>→ 情報が少なすぎて、AIが平均的でのっぺりした「いかにもAI」な絵に逃げます。</p>
+  </div>
+  <h3>黄金の3点セット</h3>
+  <div class="step"><div class="stepnum">1</div><div>
+    <p><b>スタイル宣言</b>（1行目に映像の質感を書く）</p>
+    <pre>実写のシネマティックな映像、浅い被写界深度、フィルムグレイン、夕暮れの自然光。</pre>
+  </div></div>
+  <div class="step"><div class="stepnum">2</div><div>
+    <p><b>ショット割り</b>（時間を区切ってカットを指定。5秒なら2〜3カット、15秒なら4〜6カットまで）</p>
+    <pre>ショット1: 桜並木の遠景、白い猫が歩いてくる。カメラはゆっくり猫に寄っていく。
+[2秒-] ショット2: 猫の顔のアップ、花びらが鼻先に落ちて、猫が目を細める。
+[4秒-] ショット3: 引きの画。猫が歩き去る後ろ姿、花びらが舞う。</pre>
+  </div></div>
+  <div class="step"><div class="stepnum">3</div><div>
+    <p><b>カメラは文章で書く</b>（単語の羅列はNG）</p>
+    <p>❌「ズーム、パン、追跡」 → ⭕「カメラがゆっくり小さく顔に寄っていく」「素早く横に流れて次のカットへ」</p>
+  </div></div>
+  <h3>質感を上げる魔法の言葉（好みで追加）</h3>
+  <p><code>高精細</code> <code>シャープなフォーカス</code> <code>プロのカメラで撮影</code> <code>アナモルフィックレンズ</code> <code>自然光</code> <code>映画のカラーグレーディング</code></p>
+  <h3>面倒ならAIに書かせる（推奨！）</h3>
+  <div class="card good">
+    <p>ClaudeやChatGPTに書かせるのが一番の近道です。<b>頼み方の具体例</b>を用途別に載せます。そのままコピーして使ってください。</p>
+  </div>
+
+  <p><b>① 基本形（これだけでも十分）</b></p>
+  <pre>雨の夜の東京をバイクで走る動画を作りたい。10秒。
+MiniMax H3用のプロンプトを書いて。</pre>
+
+  <p><b>② 情報を足すほど質が上がる（おすすめの型）</b></p>
+  <pre>H3用のプロンプトを書いて。条件は：
+・内容：カフェの新作パンケーキのCM
+・目的：InstagramのリールUpload用（縦長）
+・長さ：15秒
+・雰囲気：朝の光、幸せ、上品
+・セリフ：最後に女性が「幸せの一枚、はじまる。」とささやく
+・BGM：おしゃれなボサノバ
+・文字は画面に出さない</pre>
+
+  <p><b>③ 絵コンテ・構成案からの変換</b></p>
+  <pre>（絵コンテ画像やカット表を見せながら）
+この絵コンテをH3用のプロンプトに変換して。カット数はH3が安定する数に間引いてOK。</pre>
+
+  <p><b>④ 出た動画のリテイク指示（シード値とセットで）</b></p>
+  <pre>さっきの動画、カメラがほぼ動かなくて退屈だった。
+カメラワークを大胆にしたプロンプトに直して。
+シード121070429258991は固定で使う。</pre>
+
+  <p><b>⑤ シリーズもの（人物固定モード用）</b></p>
+  <pre>この参照キャラ（画像添付）で、H3の人物固定モード用プロンプトを書いて。
+今回のシーン：夜の屋上で電話しながら笑う。前回と服装は同じで。</pre>
+
+  <p><b>⑥ 逆算リサーチ（何を作るかから相談）</b></p>
+  <pre>商品Aの認知向けに15秒動画を3案考えて。
+それぞれ構成案→H3プロンプトまで一気に出して。</pre>
+
+  <h3>🏆 最上級レベルの見本（この完成度を目指す）</h3>
+  <p>公式ガイドのルールを全部載せした15秒のフル構成例です。<b>スタイル宣言→ショット割り→文章のカメラ→話者IDとセリフタグ→音の2区画</b>がすべて入っています。</p>
+  <pre>実写のシネマティックな短編映画風。アナモルフィックレンズ、浅い被写界深度、
+フィルムグレイン、ティール＆オレンジの映画的カラーグレーディング、夜明け前の青い光。
+
+ショット1: 冬の海辺の防波堤。厚手のコートを着た60代の日本人男性 (S1)（白髪、深いしわ、
+穏やかな目）が一人で立ち、水平線を見ている。カメラは背後の低い位置からゆっくり小さく
+彼に近づいていく。コートの裾と白髪が海風に揺れる。
+
+[4秒-] ショット2: 彼の横顔のクローズアップ。朝日の最初の光が顔に差し、目を細める。
+カメラは固定で、光の変化だけが顔を照らしていく。彼は静かに息を吐き、白い息が流れる。
+
+[8秒-] ショット3: 彼がカメラの方へ振り返り、わずかに微笑んで話す。口の動きはセリフに
+正確に同期する：<d>[Japanese] 今日も、始まるな。</d>
+
+[12秒-] ショット4: 大きく引いた俯瞰のドローンショット。防波堤に立つ小さな彼のシルエットと、
+朝日で金色に染まりはじめる海全体。カメラはゆっくり上昇しながら遠ざかり、余韻を残して終わる。
+
+画面内に文字・字幕・ロゴ・透かしを一切出さない。
+
+overall_soundscape: 打ち寄せる波の音、海風、遠くのカモメの鳴き声、コートの布が風にはためく音。
+
+non_diegetic_music: ソロピアノの静かな単音のフレーズから始まり、ショット4でストリングスが
+柔らかく重なって広がる。スローテンポ、控えめな音量、最後はピアノ一音で締める。</pre>
+  <div class="card">
+    <p>💡 この見本の「型」だけ真似て中身を差し替えれば、どんな題材でも最上級構成になります。ツールを使う場合、セリフと音の3行は本文に書かず<b>それぞれの入力欄</b>に移すと、さらに正確になります。</p>
+  </div>
+</section>
+
+<!-- 6 -->
+<section id="s6">
+  <h2>🎙️ セリフ・音の<span class="em">設定</span></h2>
+  <p class="lead">「🎙️ セリフ・音の設定」を開くと出てくる欄の使い方です。</p>
+  <table>
+    <tr><th>欄</th><th>書き方</th></tr>
+    <tr><td><b>セリフ</b></td><td>しゃべらせたい言葉をそのまま。日本語で書けば日本語で発話し、口も同期します。ここに書いた言葉は一言一句そのまま話します</td></tr>
+    <tr><td><b>声の感じ</b></td><td>「明るく元気な若い女性の声」「低くて渋い男性の声」など</td></tr>
+    <tr><td><b>BGM</b></td><td>⭕「ピアノとストリングス、スローテンポ、徐々に盛り上がる」のように<b>楽器・テンポ・強弱</b>で書く。❌「エモい曲」「感動的な曲」のような雰囲気の言葉は公式非推奨（効きません）</td></tr>
+    <tr><td><b>効果音・環境音</b></td><td>「雨の音」「街の雑踏」「足音」など。セリフや音楽とは別欄なのがコツ</td></tr>
+    <tr><td><b>音のバランス</b></td><td>下の表参照</td></tr>
+  </table>
+  <h3>音のバランスの選び方</h3>
+  <table>
+    <tr><th>選択肢</th><th>使いどころ</th></tr>
+    <tr><td>おまかせ</td><td>迷ったらこれ</td></tr>
+    <tr><td>セリフ優先</td><td>セリフを聞かせたい会話動画</td></tr>
+    <tr><td>🔇 しゃべらせない</td><td><b>勝手にナレーションが入って困るときはこれ！</b> BGMと環境音だけになる</td></tr>
+    <tr><td>🔇 完全に静かに</td><td>BGMもなし。環境音だけのリアル系</td></tr>
+  </table>
+  <div class="card warn">
+    <p>⚠️ ナレーション不要なのにプロンプト本文へ「音声：」「ナレーション」などと書くと、AIが気を利かせて勝手にしゃべります。不要なら本文に書かず「🔇しゃべらせない」を選ぶこと。</p>
+    <p>⚠️ 音量の数値指定（BGM30%など）はH3の仕様上できません。厳密な調整は動画編集アプリで。</p>
+  </div>
+</section>
+
+<!-- 7 -->
+<section id="s7">
+  <h2>⚙️ 画質・<span class="em">こだわり設定</span></h2>
+  <p class="lead">「⚙️ こだわり設定」を開くと出てくる欄の説明です。</p>
+  <h3>画質（重要！）</h3>
+  <table>
+    <tr><th>選択肢</th><th>解像度</th><th>5秒の時間/費用</th><th>用途</th></tr>
+    <tr><td>お試し</td><td>低い</td><td>最速/最安</td><td>構図の確認だけ</td></tr>
+    <tr><td>標準</td><td>832×464</td><td>約5分/12円</td><td>試行錯誤・下書き</td></tr>
+    <tr><td><b>高画質</b></td><td>1024×576</td><td>約8分/19円</td><td><b>SNS投稿の最低ライン</b></td></tr>
+    <tr><td><b>最高画質</b></td><td>1344×768</td><td>約13分/30円</td><td>本番・納品用（H3の上限）</td></tr>
+  </table>
+  <div class="card good">
+    <p>💡 <b>おすすめの流れ</b>：「標準」で2〜3回試して構図とプロンプトを固める → 気に入ったらシード値を入れたまま「最高画質」で本番を1回。ムダ打ちが減って結果的に安上がりです。</p>
+  </div>
+  <h3>仕上げの丁寧さ（ステップ数）</h3>
+  <p>基本は「標準（20）」のままでOK。下げると速いが崩れやすくなります。</p>
+  <h3>シード値</h3>
+  <p>AIのサイコロの目です。<b>空欄＝毎回ちがう結果</b>。生成結果の下に「今回のシード値」が表示されるので、気に入った動画が出たらメモ。<b>同じ数字を入れて生成すると似た結果を再現</b>できます。「あの感じのまま、セリフだけ変えたい」ときに超便利。</p>
+  <h3>長さのコツ</h3>
+  <ul>
+    <li>フレーム数の都合で、内部的には5/10/15秒あたりが区切りの良い長さです（ツールが自動調整）</li>
+    <li>同じ合計尺なら「5秒×3本」より「15秒×1本」の方が3〜4割安い</li>
+    <li>ただし試行錯誤は5秒で。長い動画のガチャは高くつきます</li>
+  </ul>
+</section>
+
+<!-- 8 -->
+<section id="s8">
+  <h2>💰 料金の<span class="em">仕組み</span></h2>
+  <p class="lead">前払いチャージ式なので、使いすぎても残高が尽きて止まるだけです（借金にはなりません）。</p>
+  <table>
+    <tr><th>項目</th><th>金額</th><th>いつかかる</th></tr>
+    <tr><td>GPUサーバー利用料</td><td>約210円/時間</td><td><b>サーバー起動中だけ</b>（秒単位）</td></tr>
+    <tr><td>動画1本の目安</td><td>12〜90円</td><td>画質と長さで変動（上の表参照）</td></tr>
+    <tr><td>データ保存料</td><td>約1,000円/月</td><td>常時（AIモデルの置き場代）</td></tr>
+  </table>
+  <h3>お金を無駄にしない3か条</h3>
+  <div class="card good">
+    <ol>
+      <li><b>「自動停止」のチェックを常にON</b>（これだけで止め忘れ事故はほぼゼロ）</li>
+      <li>画面の「サーバー：停止中」を確認してから離席する</li>
+      <li>試行錯誤は「標準画質・5秒」で。本番だけ高画質で</li>
+    </ol>
+  </div>
+  <p>残高は管理者がRunPodのサイト（console.runpod.io）右上でいつでも確認できます。</p>
+  <div class="card danger">
+    <p>⚠️ 一番高くつく事故は「<b>サーバーを起動したまま一晩放置</b>」です（約2,500円/晩）。自動停止チェックがあなたを守ります。</p>
+  </div>
+</section>
+
+<!-- 9 -->
+<section id="s9">
+  <h2>🚨 困ったときは<span class="em">（トラブル対応）</span></h2>
+  <table>
+    <tr><th>症状</th><th>対処</th></tr>
+    <tr><td>「GPUの空きがありません」</td><td>クラウドのGPUが満車。ツールが2分おきに自動で再試行します（最大15分）。それでもダメなら30分〜数時間おいて再挑戦</td></tr>
+    <tr><td>batを押しても画面が開かない</td><td>①Pythonが入っているか確認 ②すでに起動中かも→ブラウザで <code>localhost:8787</code> を直接開く</td></tr>
+    <tr><td>生成が異常に長い（30分超）</td><td>15秒×最高画質は30分近くかかることも。画面の経過時間が動いていれば正常</td></tr>
+    <tr><td>変な動画・崩れた動画が出た</td><td>AIのガチャ外れ。もう1〜2回生成（シード空欄で）。それでもダメならプロンプトを具体的に書き直す</td></tr>
+    <tr><td>勝手にしゃべる</td><td>「🎙️セリフ・音の設定」→音のバランス→<b>🔇しゃべらせない</b></td></tr>
+    <tr><td>画質が粗い</td><td>「⚙️こだわり設定」→画質→<b>高画質以上</b>に</td></tr>
+    <tr><td>APIキーが漏れたかも</td><td>管理者へ即連絡。RunPodの設定画面でキーを削除→新規作成すれば無効化できます</td></tr>
+    <tr><td>その他エラー全般</td><td><b>エラー画面のスクリーンショットを撮って、管理者経由でClaudeに見せる</b>のが最速です</td></tr>
+  </table>
+</section>
+
+<!-- 10 -->
+<section id="s10">
+  <h2>📜 ルールと<span class="em">マナー</span></h2>
+  <p class="lead">MiniMax H3の利用ライセンスで決まっている約束事です。</p>
+  <div class="card">
+    <ul>
+      <li>✅ 日本国内での利用はOK（EU・イギリス・韓国・アメリカでは利用不可）</li>
+      <li>✅ 商用利用OK（年商2,000万ドル未満）。ただし動画に<b>「MiniMax H3」の表示</b>が必要</li>
+      <li>✅ 公開するときは<b>AI生成であることを明示</b>する</li>
+    </ul>
+  </div>
+  <div class="card danger">
+    <ul>
+      <li>❌ <b>実在の人物</b>（有名人・知人問わず）を本人の同意なく再現する生成</li>
+      <li>❌ 未成年に関わる不適切な内容</li>
+      <li>❌ 他人を騙す目的のフェイク動画</li>
+    </ul>
+  </div>
+  <p>加えて社内ツールとしてのお願い：ツールのフォルダとAPIキーは社外に出さない、生成物の公開は社内ルールに従う、迷ったら管理者に相談。</p>
+</section>
+
+</main>
+
+<script>
+document.querySelectorAll('.navitem').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.navitem').forEach(b => b.classList.remove('sel'));
+    document.querySelectorAll('section').forEach(s => s.classList.remove('show'));
+    btn.classList.add('sel');
+    document.getElementById(btn.dataset.s).classList.add('show');
+    document.querySelector('main').scrollIntoView({ behavior: 'instant' });
+    window.scrollTo(0, 0);
+  });
+});
+</script>
+</body>
+</html>

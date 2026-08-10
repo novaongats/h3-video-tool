@@ -1,0 +1,10 @@
+{
+  "version": "2.1.0",
+  "files": [
+    "h3_tool/server.py",
+    "h3_tool/index.html",
+    "h3_tool/wf_t2v.json",
+    "h3_tool/wf_i2v.json",
+    "h3_tool/wf_r2v.json"
+  ]
+}

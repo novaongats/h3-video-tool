@@ -1,0 +1,15 @@
+h3_tool/config.json
+h3_tool/history.json
+h3_tool/*.py.bak
+h3_tool/create_pod.py
+h3_tool/create_jp_pod.py
+h3_tool/create_jp_volume.py
+h3_tool/delete_canada.py
+h3_tool/retry_start.py
+h3_tool/debug_prompt.py
+outputs/
+*.zip
+*.log
+使い方ガイド.md
+H3プロンプト攻略ガイド.md
+ローカルLLM構築指示プロンプト.md

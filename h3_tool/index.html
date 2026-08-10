@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>H3かんたん動画メーカー</title>
+<style>
+  :root { --bg:#0f1117; --card:#1a1d27; --card2:#232736; --tx:#e8eaf2; --sub:#9aa0b4; --ac:#6c5ce7; --ac2:#00cec9; --ok:#00b894; --ng:#ff7675; --warn:#fdcb6e; }
+  * { box-sizing:border-box; margin:0; padding:0; font-family:"Segoe UI","Hiragino Sans","Meiryo",sans-serif; }
+  body { background:var(--bg); color:var(--tx); min-height:100vh; }
+  .wrap { max-width:760px; margin:0 auto; padding:20px 16px 60px; }
+  h1 { font-size:22px; margin-bottom:4px; }
+  h1 .dot { color:var(--ac2); }
+  .sub { color:var(--sub); font-size:13px; margin-bottom:18px; }
+  .card { background:var(--card); border-radius:14px; padding:18px; margin-bottom:14px; border:1px solid #2a2e3f; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .pill { display:inline-flex; align-items:center; gap:7px; padding:6px 14px; border-radius:20px; font-size:13px; background:var(--card2); }
+  .pill .led { width:9px; height:9px; border-radius:50%; background:var(--sub); }
+  .led.on { background:var(--ok); box-shadow:0 0 8px var(--ok); }
+  .led.off { background:var(--ng); }
+  .led.busy { background:var(--warn); animation:blink 1s infinite; }
+  @keyframes blink { 50% { opacity:.3; } }
+  button { border:none; border-radius:10px; padding:11px 18px; font-size:14px; font-weight:600; cursor:pointer; color:#fff; background:var(--card2); transition:.15s; }
+  button:hover { filter:brightness(1.15); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  .btn-main { background:linear-gradient(135deg,var(--ac),#8e7cf3); font-size:17px; padding:15px 22px; width:100%; border-radius:12px; }
+  .btn-stop { background:#3d2b2b; color:var(--ng); }
+  .btn-start { background:#1f3d33; color:var(--ok); }
+  label.lbl { display:block; font-size:13px; color:var(--sub); margin:14px 0 6px; }
+  textarea { width:100%; min-height:110px; background:var(--card2); color:var(--tx); border:1px solid #333850; border-radius:10px; padding:12px; font-size:14px; resize:vertical; }
+  textarea:focus { outline:2px solid var(--ac); }
+  .tabs { display:flex; gap:8px; }
+  .tab { flex:1; text-align:center; padding:12px; border-radius:10px; background:var(--card2); cursor:pointer; font-size:14px; border:2px solid transparent; }
+  .tab.sel { border-color:var(--ac); background:#262a45; }
+  .seg { display:flex; gap:8px; }
+  .seg button { flex:1; }
+  .seg button.sel { background:var(--ac); }
+  input[type=range] { width:100%; accent-color:var(--ac); }
+  .drop { border:2px dashed #3a3f58; border-radius:10px; padding:18px; text-align:center; color:var(--sub); cursor:pointer; font-size:13px; }
+  .drop img { max-height:120px; border-radius:8px; margin-top:8px; }
+  .status-big { text-align:center; padding:10px 0; }
+  .spinner { width:34px; height:34px; border:4px solid #333850; border-top-color:var(--ac2); border-radius:50%; margin:0 auto 10px; animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .msg { font-size:15px; }
+  .err { color:var(--ng); font-size:14px; white-space:pre-wrap; }
+  .cost { font-size:12px; color:var(--sub); text-align:center; margin-top:8px; }
+  video { width:100%; border-radius:10px; margin-top:8px; background:#000; }
+  .gal { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .gal video { margin:0; }
+  .hint { font-size:12px; color:var(--sub); line-height:1.7; margin-top:8px; }
+  .keybox input { width:100%; padding:12px; border-radius:10px; border:1px solid #333850; background:var(--card2); color:var(--tx); font-size:14px; }
+  input.txt, select.txt { width:100%; padding:10px 12px; border-radius:10px; border:1px solid #333850; background:var(--card2); color:var(--tx); font-size:14px; }
+  input.txt:focus, select.txt:focus { outline:2px solid var(--ac); }
+  a { color:var(--ac2); }
+  .hidden { display:none !important; }
+  .elapsed { font-size:12px; color:var(--sub); margin-top:4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🎬 H3かんたん動画メーカー <span class="dot">●</span></h1>
+  <div class="sub">文章や画像から、音声つき動画をワンクリック生成（MiniMax H3 / RunPod）</div>
+
+  <!-- 初回セットアップ -->
+  <div class="card hidden" id="setup">
+    <b>はじめに1回だけ：RunPodのAPIキーを設定します</b>
+    <div class="hint">
+      1. <a href="https://console.runpod.io/user/settings" target="_blank">RunPodの設定ページ</a>を開く<br>
+      2. 「API keys」の欄で <b>Create API key</b> を押す（名前は何でもOK・権限は All / Read &amp; Write）<br>
+      3. 表示された長い文字列をコピーして、下に貼り付けて保存
+    </div>
+    <div class="keybox" style="margin-top:10px"><input id="apikey" type="password" placeholder="ここにAPIキーを貼り付け"></div>
+    <div style="margin-top:10px"><button class="btn-main" onclick="saveKey()">保存してはじめる</button></div>
+    <div class="err" id="keyerr"></div>
+  </div>
+
+  <!-- サーバー状態 -->
+  <div class="card hidden" id="serverCard">
+    <div class="row" style="justify-content:space-between">
+      <span class="pill"><span class="led" id="podLed"></span><span id="podText">確認中…</span></span>
+      <span class="row">
+        <button class="btn-start" id="btnStart" onclick="podStart()">サーバー起動</button>
+        <button class="btn-stop" id="btnStop" onclick="podStop()">サーバー停止</button>
+      </span>
+    </div>
+    <div class="hint">起動中は約210円/時かかります。<b>使い終わったら必ず停止！</b>（下の自動停止をONにしておけば安心）</div>
+  </div>
+
+  <!-- 生成フォーム -->
+  <div class="card hidden" id="genCard">
+    <div class="tabs">
+      <div class="tab sel" id="tab_t2v" onclick="setMode('t2v')">📝 文章から</div>
+      <div class="tab" id="tab_i2v" onclick="setMode('i2v')">🖼️ 画像を動かす</div>
+      <div class="tab" id="tab_r2v" onclick="setMode('r2v')">👤 人物固定</div>
+    </div>
+
+    <div id="imgArea" class="hidden">
+      <label class="lbl">動かしたい画像</label>
+      <div class="drop" id="drop" onclick="document.getElementById('file').click()">
+        クリックして画像を選択（またはドラッグ＆ドロップ）
+        <div id="preview"></div>
+      </div>
+      <input type="file" id="file" accept="image/*" class="hidden">
+    </div>
+
+    <div id="refArea" class="hidden">
+      <label class="lbl">固定したい人物・キャラの参照画像（1〜4枚。顔がはっきり写っているものが◎）</label>
+      <div class="drop" id="refDrop" onclick="document.getElementById('refFiles').click()">
+        クリックして画像を選択（複数選択OK）
+        <div id="refPreview" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap"></div>
+      </div>
+      <input type="file" id="refFiles" accept="image/*" multiple class="hidden">
+      <div class="hint">このモードは参照画像の人物の見た目（顔・髪型・服装）を保ったまま、文章の内容で自由に動かせます。※通常より生成に時間がかかります（最大3倍）</div>
+    </div>
+
+    <label class="lbl">どんな動画にしたい？（日本語OK。セリフ・音・カメラの動きも書ける）</label>
+    <textarea id="prompt" placeholder="例：桜並木を歩く白い猫。カメラはゆっくり猫を追いかける。BGMは穏やかなピアノ。風で花びらが舞う。"></textarea>
+
+    <label class="lbl">長さ：<b id="secLabel">5秒</b>（長いほど時間とお金がかかる）</label>
+    <input type="range" id="seconds" min="4" max="15" value="5" oninput="updateSec()">
+
+    <label class="lbl">画面の形</label>
+    <div class="seg" id="aspectSeg">
+      <button class="sel" data-a="16:9" onclick="setAspect('16:9')">🖥️ 横長</button>
+      <button data-a="9:16" onclick="setAspect('9:16')">📱 縦長</button>
+      <button data-a="1:1" onclick="setAspect('1:1')">⬜ 正方形</button>
+    </div>
+
+    <details style="margin-top:16px">
+      <summary style="cursor:pointer;color:var(--ac2);font-size:14px;font-weight:600">🎙️ セリフ・音の設定（クリックで開く）</summary>
+
+      <label class="lbl">セリフ（しゃべらせたい言葉。口の動きも自動で同期＝リップシンク）</label>
+      <textarea id="dialogue" style="min-height:60px" placeholder="例：いらっしゃいませ！本日のおすすめはこちらです。"></textarea>
+
+      <label class="lbl">声の感じ</label>
+      <input class="txt" id="voice" placeholder="例：明るく元気な若い女性の声／低くて渋い男性の声">
+
+      <label class="lbl">BGM（音楽の指定）</label>
+      <input class="txt" id="bgm" placeholder="例：切ないピアノバラード／アップテンポなEDM／ジャズ">
+
+      <label class="lbl">効果音・環境音</label>
+      <input class="txt" id="se" placeholder="例：雨の音、遠くの雷鳴／街の雑踏／波の音">
+
+      <label class="lbl">音のバランス</label>
+      <select id="mix" class="txt">
+        <option value="auto">おまかせ</option>
+        <option value="voice_first">セリフ優先（BGM・効果音は控えめ）</option>
+        <option value="no_speech">🔇 しゃべらせない（BGM・環境音のみ）</option>
+        <option value="silent">🔇 完全に静かに（環境音のみ・BGMもなし）</option>
+        <option value="bgm_low">BGMをごく控えめに</option>
+        <option value="no_bgm">BGMなし（環境音とセリフのみ）</option>
+      </select>
+      <div class="hint">※ 勝手にナレーションが入る場合は「🔇 しゃべらせない」を選んでください。H3は数値での音量指定はできません。</div>
+    </details>
+
+    <details style="margin-top:10px">
+      <summary style="cursor:pointer;color:var(--ac2);font-size:14px;font-weight:600">⚙️ こだわり設定（クリックで開く）</summary>
+
+      <label class="lbl">画質（きれいなほど生成時間とお金が比例して増える）</label>
+      <select id="qualityMp" class="txt">
+        <option value="0.2">お試し（低画質・最速）</option>
+        <option value="0.4" selected>標準（832×464相当・5秒約5分）</option>
+        <option value="0.6">高画質（1024×576相当・5秒約8分）</option>
+        <option value="1.0">最高画質（1344×768相当・5秒約13分）</option>
+      </select>
+      <div class="hint">※ 最高画質はH3の上限（768p）。SNS投稿用なら「高画質」以上がおすすめ。</div>
+
+      <label class="lbl">仕上げの丁寧さ（ステップ数）</label>
+      <select id="steps" class="txt">
+        <option value="15">はやい（15）</option>
+        <option value="20" selected>標準（20）</option>
+        <option value="25">ていねい（25）</option>
+      </select>
+
+      <label class="lbl">シード値（空欄＝毎回ランダム。数字を入れると同じ数字で似た結果を再現できる）</label>
+      <input class="txt" id="seed" placeholder="空欄でOK。前回の値は生成結果の下に表示されます">
+
+      <label class="lbl" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="noText" checked style="width:18px;height:18px;accent-color:var(--ac)">
+        画面に文字・ロゴ・透かしを出さない（推奨）
+      </label>
+    </details>
+
+    <label class="lbl" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+      <input type="checkbox" id="autoStop" checked style="width:18px;height:18px;accent-color:var(--ac)">
+      生成が終わったらサーバーを自動停止する（課金ストップ・おすすめ）
+    </label>
+
+    <div style="margin-top:14px">
+      <button class="btn-main" id="btnGen" onclick="generate()">🚀 動画を生成する</button>
+    </div>
+    <div class="cost" id="costText"></div>
+  </div>
+
+  <!-- 進捗 -->
+  <div class="card hidden" id="progCard">
+    <div class="status-big">
+      <div class="spinner"></div>
+      <div class="msg" id="progMsg">準備中…</div>
+      <div class="elapsed" id="elapsed"></div>
+    </div>
+  </div>
+
+  <!-- 結果 -->
+  <div class="card hidden" id="doneCard">
+    <b>✅ 完成しました！</b>
+    <video id="result" controls autoplay loop></video>
+    <div class="hint">動画は「outputs」フォルダにも保存されています。右クリック→「名前を付けて保存」もできます。</div>
+    <div class="hint" id="seedInfo"></div>
+  </div>
+  <div class="card hidden" id="errCard">
+    <b style="color:var(--ng)">⚠️ エラーが発生しました</b>
+    <div class="err" id="errMsg"></div>
+    <div class="hint">・GPUの空きがない場合は時間をおいて再試行してください<br>・何度も失敗する場合はこの画面ごとClaudeに見せてください</div>
+  </div>
+
+  <!-- 履歴・ギャラリー -->
+  <div class="card hidden" id="galCard">
+    <b>📚 これまでの作品と生成記録</b>
+    <div class="hint">プロンプトは📋でコピー、↩️で上のフォームにまるごと呼び出せます（シード値込み＝似た動画を再現可能）</div>
+    <div id="histList" style="margin-top:10px"></div>
+    <div class="gal" id="gallery" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<script>
+let mode = 't2v', aspect = '16:9', imgB64 = null, imgName = null, hasKey = false, generating = false;
+
+function $(id) { return document.getElementById(id); }
+
+function setMode(m) {
+  mode = m;
+  $('tab_t2v').classList.toggle('sel', m === 't2v');
+  $('tab_i2v').classList.toggle('sel', m === 'i2v');
+  $('tab_r2v').classList.toggle('sel', m === 'r2v');
+  $('imgArea').classList.toggle('hidden', m !== 'i2v');
+  $('refArea').classList.toggle('hidden', m !== 'r2v');
+}
+
+let refImages = [];
+$('refFiles').addEventListener('change', e => {
+  refImages = [];
+  $('refPreview').innerHTML = '';
+  [...e.target.files].slice(0, 4).forEach(f => {
+    const r = new FileReader();
+    r.onload = () => {
+      refImages.push({ name: f.name, b64: r.result.split(',')[1] });
+      $('refPreview').innerHTML += '<img src="' + r.result + '" style="max-height:80px;border-radius:6px">';
+    };
+    r.readAsDataURL(f);
+  });
+});
+function setAspect(a) {
+  aspect = a;
+  document.querySelectorAll('#aspectSeg button').forEach(b => b.classList.toggle('sel', b.dataset.a === a));
+}
+function updateSec() {
+  const s = $('seconds').value;
+  $('secLabel').textContent = s + '秒';
+  $('costText').textContent = 'このサーバー(A100)での目安: 約' + Math.round(s * 3.5) + '〜' + Math.round(s * 5) + '円/本 + 起動時間ぶんのサーバー代';
+}
+updateSec();
+
+$('file').addEventListener('change', e => loadImage(e.target.files[0]));
+const drop = $('drop');
+drop.addEventListener('dragover', e => { e.preventDefault(); });
+drop.addEventListener('drop', e => { e.preventDefault(); loadImage(e.dataTransfer.files[0]); });
+function loadImage(f) {
+  if (!f) return;
+  imgName = f.name;
+  const r = new FileReader();
+  r.onload = () => {
+    imgB64 = r.result.split(',')[1];
+    $('preview').innerHTML = '<img src="' + r.result + '">';
+    const img = new Image();
+    img.onload = () => {
+      const ratio = img.width / img.height;
+      setAspect(ratio > 1.3 ? '16:9' : ratio < 0.77 ? '9:16' : '1:1');
+    };
+    img.src = r.result;
+  };
+  r.readAsDataURL(f);
+}
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+  return j;
+}
+
+async function saveKey() {
+  $('keyerr').textContent = '';
+  try {
+    await api('/api/setkey', { method: 'POST', body: JSON.stringify({ api_key: $('apikey').value }) });
+    hasKey = true;
+    $('setup').classList.add('hidden');
+    showMain();
+  } catch (e) { $('keyerr').textContent = e.message; }
+}
+
+function showMain() {
+  $('serverCard').classList.remove('hidden');
+  $('genCard').classList.remove('hidden');
+  $('galCard').classList.remove('hidden');
+  refreshGallery();
+}
+
+async function podStart() { $('btnStart').disabled = true; try { await api('/api/start', { method: 'POST' }); } catch (e) { alert(e.message); } }
+async function podStop() { $('btnStop').disabled = true; try { await api('/api/stop', { method: 'POST' }); } catch (e) { alert(e.message); } }
+
+async function generate() {
+  if (generating) return;
+  const prompt = $('prompt').value.trim();
+  if (!prompt) { alert('動画の内容を入力してください'); return; }
+  if (mode === 'i2v' && !imgB64) { alert('画像を選択してください'); return; }
+  if (mode === 'r2v' && refImages.length === 0) { alert('参照画像を1枚以上選択してください'); return; }
+  $('doneCard').classList.add('hidden');
+  $('errCard').classList.add('hidden');
+  try {
+    await api('/api/generate', { method: 'POST', body: JSON.stringify({
+      mode, prompt, seconds: +$('seconds').value, aspect,
+      auto_stop: $('autoStop').checked,
+      image_b64: mode === 'i2v' ? imgB64 : null, image_name: imgName,
+      ref_images: mode === 'r2v' ? refImages : null,
+      dialogue: $('dialogue').value, voice: $('voice').value,
+      bgm: $('bgm').value, se: $('se').value, mix: $('mix').value,
+      quality_mp: $('qualityMp').value, steps: $('steps').value,
+      seed: $('seed').value, no_text: $('noText').checked,
+    })});
+    generating = true;
+  } catch (e) { alert(e.message); }
+}
+
+const STATE_MSG = { starting_pod: 'GPUサーバーを起動しています…（1〜2分）', waiting_comfy: '動画生成エンジンの準備中…（1〜2分）', uploading: '画像をアップロード中…', generating: '動画を生成中…（5秒動画で約5分／15秒で約15分）', downloading: '動画をPCに保存中…', stopping_pod: '完成！サーバーを自動停止しています…' };
+
+async function poll() {
+  try {
+    const s = await api('/api/status');
+    const pod = s.pod, job = s.job;
+    const led = $('podLed'), txt = $('podText');
+    if (pod === 'RUNNING') { led.className = 'led on'; txt.textContent = 'サーバー：起動中（課金中 約210円/時）'; }
+    else if (pod === 'EXITED') { led.className = 'led off'; txt.textContent = 'サーバー：停止中（課金なし）'; }
+    else if (pod === 'NO_KEY') { txt.textContent = 'APIキー未設定'; }
+    else { led.className = 'led busy'; txt.textContent = 'サーバー：' + pod; }
+    $('btnStart').disabled = (pod === 'RUNNING');
+    $('btnStop').disabled = (pod === 'EXITED');
+
+    const busy = ['starting_pod','waiting_comfy','uploading','generating','downloading','stopping_pod'].includes(job.state);
+    generating = busy;
+    $('progCard').classList.toggle('hidden', !busy);
+    $('btnGen').disabled = busy;
+    if (busy) {
+      $('errCard').classList.add('hidden');
+      $('doneCard').classList.add('hidden');
+      $('progMsg').textContent = STATE_MSG[job.state] || job.message || '処理中…';
+      if (job.started_at) {
+        const m = Math.floor((Date.now()/1000 - job.started_at) / 60), sec = Math.floor((Date.now()/1000 - job.started_at) % 60);
+        $('elapsed').textContent = '経過時間: ' + m + '分' + sec + '秒';
+      }
+    }
+    if (job.state === 'done' && job.video) {
+      $('doneCard').classList.remove('hidden');
+      if (job.seed) $('seedInfo').textContent = '今回のシード値: ' + job.seed + '（この数字を「こだわり設定」に入れると似た結果を再現できます）';
+      const v = $('result');
+      const src = '/videos/' + encodeURIComponent(job.video);
+      if (!v.src.endsWith(encodeURIComponent(job.video))) { v.src = src; refreshGallery(); }
+    }
+    if (job.state === 'error' && job.error) {
+      $('errCard').classList.remove('hidden');
+      $('errMsg').textContent = job.error;
+    }
+  } catch (e) { /* サーバー再起動待ちなど */ }
+}
+
+let HIST = [];
+async function refreshGallery() {
+  try {
+    const h = await api('/api/history');
+    HIST = h.history || [];
+    $('histList').innerHTML = HIST.map((e, i) => `
+      <div style="display:flex;gap:12px;background:var(--card2);border-radius:10px;padding:10px;margin-bottom:10px;flex-wrap:wrap">
+        <video src="/videos/${encodeURIComponent(e.video)}" controls preload="metadata" style="width:220px;margin:0;flex-shrink:0"></video>
+        <div style="flex:1;min-width:200px">
+          <div style="font-size:12px;color:var(--sub)">${e.time}｜${e.mode === 'i2v' ? '🖼️画像' : e.mode === 'r2v' ? '👤人物固定' : '📝文章'}｜${e.seconds}秒｜${e.aspect}｜シード:${e.seed}</div>
+          <div style="font-size:13px;line-height:1.6;margin:6px 0;max-height:66px;overflow:hidden" id="hp${i}">${(e.prompt || '').replace(/</g, '&lt;')}</div>
+          <a href="javascript:void(0)" style="font-size:12px" onclick="$('hp${i}').style.maxHeight = $('hp${i}').style.maxHeight ? '' : '66px'">全文を表示/たたむ</a>
+          <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+            <button style="font-size:12.5px;padding:8px 12px" onclick="copyPrompt(${i}, this)">📋 プロンプトをコピー</button>
+            <button style="font-size:12.5px;padding:8px 12px" onclick="restoreEntry(${i})">↩️ 設定を呼び出す</button>
+          </div>
+        </div>
+      </div>`).join('');
+    // 履歴に無い古い動画も一応表示
+    const g = await api('/api/videos');
+    const known = new Set(HIST.map(e => e.video));
+    $('gallery').innerHTML = g.videos.filter(v => !known.has(v)).map(v => '<video src="/videos/' + encodeURIComponent(v) + '" controls preload="metadata"></video>').join('');
+  } catch (e) {}
+}
+
+function copyPrompt(i, btn) {
+  const e = HIST[i];
+  let text = e.prompt || '';
+  navigator.clipboard.writeText(text).then(() => {
+    const old = btn.textContent;
+    btn.textContent = '✅ コピーしました';
+    setTimeout(() => { btn.textContent = old; }, 1500);
+  });
+}
+
+function restoreEntry(i) {
+  const e = HIST[i];
+  setMode(e.mode === 'r2v' ? 'r2v' : e.mode === 'i2v' ? 'i2v' : 't2v');
+  $('prompt').value = e.prompt || '';
+  $('dialogue').value = e.dialogue || '';
+  $('voice').value = e.voice || '';
+  $('bgm').value = e.bgm || '';
+  $('se').value = e.se || '';
+  $('mix').value = e.mix || 'auto';
+  $('seconds').value = e.seconds || 5; updateSec();
+  setAspect(e.aspect || '16:9');
+  $('qualityMp').value = e.quality_mp || '0.4';
+  $('steps').value = e.steps || '20';
+  $('seed').value = e.seed || '';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+(async () => {
+  try {
+    const c = await api('/api/config');
+    hasKey = c.has_key;
+    $('autoStop').checked = c.auto_stop !== false;
+    if (hasKey) { showMain(); } else { $('setup').classList.remove('hidden'); }
+  } catch (e) { $('setup').classList.remove('hidden'); }
+  poll();
+  setInterval(poll, 4000);
+})();
+</script>
+</body>
+</html>
