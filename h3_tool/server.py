@@ -17,7 +17,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "2.1.1"
+SELF_VERSION = "2.1.2"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -594,7 +594,9 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 cfg["api_key"] = key
                 try:
-                    st = pod_status(cfg)
+                    # キーの有効性確認を兼ねて、共有ボリュームから現在のPodを自動発見する
+                    pod = resolve_pod(cfg)
+                    st = pod.get("desiredStatus", "UNKNOWN") if pod else "MISSING"
                 except RunPodError as e:
                     self._send(400, {"error": str(e)})
                     return
