@@ -1,10 +1,11 @@
 {
-  "version": "2.4.1",
+  "version": "2.4.2",
   "files": [
     "h3_tool/server.py",
     "h3_tool/index.html",
     "h3_tool/wf_t2v.json",
     "h3_tool/wf_i2v.json",
-    "h3_tool/wf_r2v.json"
+    "h3_tool/wf_r2v.json",
+    "説明書.html"
   ]
 }
