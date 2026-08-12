@@ -17,7 +17,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "2.5.5"
+SELF_VERSION = "2.5.6"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -691,7 +691,8 @@ class Handler(BaseHTTPRequestHandler):
             with open(os.path.join(BASE_DIR, "index.html"), "r", encoding="utf-8") as f:
                 self._send(200, f.read(), "text/html; charset=utf-8")
         elif path == "/api/config":
-            self._send(200, {"has_key": bool(cfg.get("api_key")), "auto_stop": cfg.get("auto_stop", True)})
+            self._send(200, {"has_key": bool(cfg.get("api_key")), "auto_stop": cfg.get("auto_stop", True),
+                             "version": SELF_VERSION})
         elif path == "/api/status":
             out = {"job": dict(JOB)}
             if not cfg.get("api_key"):

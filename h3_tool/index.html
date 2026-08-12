@@ -60,7 +60,7 @@
 <body>
 <div class="wrap">
   <h1>🎬 H3かんたん動画メーカー <span class="dot">●</span></h1>
-  <div class="sub">文章や画像から、音声つき動画をワンクリック生成（MiniMax H3 / RunPod）</div>
+  <div class="sub">文章や画像から、音声つき動画をワンクリック生成（MiniMax H3 / RunPod）<span id="verTag" style="margin-left:8px;color:#555"></span></div>
 
   <!-- 初回セットアップ -->
   <div class="card hidden" id="setup">
@@ -660,6 +660,7 @@ function restoreEntry(i) {
   try {
     const c = await api('/api/config');
     hasKey = c.has_key;
+    if (c.version) $('verTag').textContent = 'v' + c.version;
     $('autoStop').checked = c.auto_stop !== false;
     if (hasKey) { showMain(); } else { $('setup').classList.remove('hidden'); }
   } catch (e) { $('setup').classList.remove('hidden'); }
