@@ -54,6 +54,7 @@
   a { color:var(--ac2); }
   .hidden { display:none !important; }
   .elapsed { font-size:12px; color:var(--sub); margin-top:4px; }
+  .clearbtn { background:#3d2b2b; color:var(--ng); font-size:12px; padding:6px 12px; margin-top:6px; }
 </style>
 </head>
 <body>
@@ -109,48 +110,54 @@
     </div>
 
     <div id="flfArea" class="hidden">
-      <label class="lbl">最初の画像（動画のスタート地点）</label>
+      <label class="lbl">最初の画像（動画のスタート地点／JPG・PNG・WebP）</label>
       <div class="drop" onclick="document.getElementById('flfFirst').click()">クリックして画像を選択<div id="flfFirstPrev"></div></div>
-      <input type="file" id="flfFirst" accept="image/*" class="hidden">
-      <label class="lbl">最後の画像（動画のゴール地点）</label>
+      <button class="clearbtn hidden" id="clrFlfFirst" onclick="clearZone('flfFirst')">✕ 取り消す</button>
+      <input type="file" id="flfFirst" accept=".jpg,.jpeg,.png,.webp,.bmp" class="hidden">
+      <label class="lbl">最後の画像（動画のゴール地点／JPG・PNG・WebP）</label>
       <div class="drop" onclick="document.getElementById('flfLast').click()">クリックして画像を選択<div id="flfLastPrev"></div></div>
-      <input type="file" id="flfLast" accept="image/*" class="hidden">
+      <button class="clearbtn hidden" id="clrFlfLast" onclick="clearZone('flfLast')">✕ 取り消す</button>
+      <input type="file" id="flfLast" accept=".jpg,.jpeg,.png,.webp,.bmp" class="hidden">
       <div class="hint">2枚の画像の間を滑らかに繋ぐ動画を作ります（変身前→変身後、昼→夜、商品の角度A→角度B など）。プロンプトには「どう繋がってほしいか」を書くと効きます。</div>
     </div>
 
     <div id="imgArea" class="hidden">
-      <label class="lbl">動かしたい画像</label>
+      <label class="lbl">動かしたい画像（対応形式: JPG / PNG / WebP）</label>
       <div class="drop" id="drop" onclick="document.getElementById('file').click()">
         クリックして画像を選択（またはドラッグ＆ドロップ）
         <div id="preview"></div>
       </div>
-      <input type="file" id="file" accept="image/*" class="hidden">
+      <button class="clearbtn hidden" id="clrImg" onclick="clearZone('img')">✕ 画像の選択を取り消す</button>
+      <input type="file" id="file" accept=".jpg,.jpeg,.png,.webp,.bmp" class="hidden">
     </div>
 
     <div id="refArea" class="hidden">
-      <label class="lbl">固定したい人物・キャラの参照画像（1〜4枚。顔がはっきり写っているものが◎）</label>
+      <label class="lbl">固定したい人物・キャラの参照画像（1〜4枚／JPG・PNG・WebP。顔がはっきり写っているものが◎）</label>
       <div class="drop" id="refDrop" onclick="document.getElementById('refFiles').click()">
         クリックして画像を選択（複数選択OK）
         <div id="refPreview" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap"></div>
       </div>
-      <input type="file" id="refFiles" accept="image/*" multiple class="hidden">
+      <button class="clearbtn hidden" id="clrRef" onclick="clearZone('ref')">✕ 画像を全部取り消す</button>
+      <input type="file" id="refFiles" accept=".jpg,.jpeg,.png,.webp,.bmp" multiple class="hidden">
       <div class="hint">このモードは参照画像の人物の見た目（顔・髪型・服装）を保ったまま、文章の内容で自由に動かせます。※通常より生成に時間がかかります（最大3倍）</div>
     </div>
 
     <div id="editArea" class="hidden">
-      <label class="lbl">🎞️ 編集する元動画（必須）</label>
+      <label class="lbl">🎞️ 編集する元動画（必須／対応形式: MP4・WebM・MKV、60MBまで）</label>
       <div class="drop" onclick="document.getElementById('refVideo').click()">
-        クリックして動画を選択（60MBまで。動き・カメラ・背景はこの動画のまま維持されます）
+        クリックして動画を選択（動き・カメラ・背景はこの動画のまま維持されます）
         <div id="refVideoPrev" style="font-size:12px;color:var(--ac2);margin-top:6px"></div>
       </div>
+      <button class="clearbtn hidden" id="clrVideo" onclick="clearZone('video')">✕ 動画の選択を取り消す</button>
       <input type="file" id="refVideo" accept=".mp4,.webm,.mkv,video/mp4" class="hidden">
 
-      <label class="lbl">変更後の見た目の参照画像（任意・0〜4枚。例：差し替えたい顔や服の画像）</label>
+      <label class="lbl">変更後の見た目の参照画像（任意・0〜4枚／JPG・PNG・WebP。例：差し替えたい顔や服の画像）</label>
       <div class="drop" onclick="document.getElementById('editRefFiles').click()">
         クリックして画像を選択（画像なし＝下の指示文だけで変更もOK）
         <div id="editRefPreview" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap"></div>
       </div>
-      <input type="file" id="editRefFiles" accept="image/*" multiple class="hidden">
+      <button class="clearbtn hidden" id="clrEditRef" onclick="clearZone('editRef')">✕ 画像を全部取り消す</button>
+      <input type="file" id="editRefFiles" accept=".jpg,.jpeg,.png,.webp,.bmp" multiple class="hidden">
 
       <div class="hint">プロンプト欄に「何をどう変えるか」を書いてください（例：人物の顔だけを参照画像の女性に変える／服を赤いドレスに変える。それ以外は変えない）。※生成時間は通常の約3倍</div>
       <div class="hint" style="color:var(--warn)">⚠️ 実在の人物（有名人・知人）の動画を本人の同意なく顔・姿を差し替えることは禁止です（ライセンス違反・法的リスク）。自分たちで作った動画や、同意のある素材だけに使ってください。</div>
@@ -289,6 +296,15 @@ function setMode(m) {
   $('editArea').classList.toggle('hidden', m !== 'edit');
 }
 
+function clearZone(z) {
+  if (z === 'img') { imgB64 = null; imgName = null; $('preview').innerHTML = ''; $('file').value = ''; $('clrImg').classList.add('hidden'); }
+  if (z === 'flfFirst') { flfFirstB64 = null; flfFirstName = null; $('flfFirstPrev').innerHTML = ''; $('flfFirst').value = ''; $('clrFlfFirst').classList.add('hidden'); }
+  if (z === 'flfLast') { flfLastB64 = null; flfLastName = null; $('flfLastPrev').innerHTML = ''; $('flfLast').value = ''; $('clrFlfLast').classList.add('hidden'); }
+  if (z === 'ref') { refImages = []; $('refPreview').innerHTML = ''; $('refFiles').value = ''; $('clrRef').classList.add('hidden'); }
+  if (z === 'editRef') { editImages = []; $('editRefPreview').innerHTML = ''; $('editRefFiles').value = ''; $('clrEditRef').classList.add('hidden'); }
+  if (z === 'video') { refVideoB64 = null; refVideoName = null; $('refVideoPrev').textContent = ''; $('refVideo').value = ''; $('clrVideo').classList.add('hidden'); }
+}
+
 let editImages = [];
 $('editRefFiles').addEventListener('change', e => {
   editImages = [];
@@ -298,6 +314,7 @@ $('editRefFiles').addEventListener('change', e => {
     r.onload = () => {
       editImages.push({ name: f.name, b64: r.result.split(',')[1] });
       $('editRefPreview').innerHTML += '<img src="' + r.result + '" style="max-height:80px;border-radius:6px">';
+      $('clrEditRef').classList.remove('hidden');
     };
     r.readAsDataURL(f);
   });
@@ -307,13 +324,13 @@ let flfFirstB64 = null, flfFirstName = null, flfLastB64 = null, flfLastName = nu
 $('flfFirst').addEventListener('change', e => {
   const f = e.target.files[0]; if (!f) return;
   const r = new FileReader();
-  r.onload = () => { flfFirstB64 = r.result.split(',')[1]; flfFirstName = f.name; $('flfFirstPrev').innerHTML = '<img src="' + r.result + '">'; };
+  r.onload = () => { flfFirstB64 = r.result.split(',')[1]; flfFirstName = f.name; $('flfFirstPrev').innerHTML = '<img src="' + r.result + '">'; $('clrFlfFirst').classList.remove('hidden'); };
   r.readAsDataURL(f);
 });
 $('flfLast').addEventListener('change', e => {
   const f = e.target.files[0]; if (!f) return;
   const r = new FileReader();
-  r.onload = () => { flfLastB64 = r.result.split(',')[1]; flfLastName = f.name; $('flfLastPrev').innerHTML = '<img src="' + r.result + '">'; };
+  r.onload = () => { flfLastB64 = r.result.split(',')[1]; flfLastName = f.name; $('flfLastPrev').innerHTML = '<img src="' + r.result + '">'; $('clrFlfLast').classList.remove('hidden'); };
   r.readAsDataURL(f);
 });
 
@@ -326,7 +343,7 @@ $('refVideo').addEventListener('change', e => {
   }
   if (f.size > 60 * 1024 * 1024) { alert('動画は60MB以下にしてください（短く切り出すのがおすすめ）'); e.target.value = ''; return; }
   const r = new FileReader();
-  r.onload = () => { refVideoB64 = r.result.split(',')[1]; refVideoName = f.name; $('refVideoPrev').textContent = '🎞️ ' + f.name + '（' + Math.round(f.size / 1024 / 1024 * 10) / 10 + 'MB）を使用'; };
+  r.onload = () => { refVideoB64 = r.result.split(',')[1]; refVideoName = f.name; $('refVideoPrev').textContent = '🎞️ ' + f.name + '（' + Math.round(f.size / 1024 / 1024 * 10) / 10 + 'MB）を使用'; $('clrVideo').classList.remove('hidden'); };
   r.readAsDataURL(f);
 });
 
@@ -339,6 +356,7 @@ $('refFiles').addEventListener('change', e => {
     r.onload = () => {
       refImages.push({ name: f.name, b64: r.result.split(',')[1] });
       $('refPreview').innerHTML += '<img src="' + r.result + '" style="max-height:80px;border-radius:6px">';
+      $('clrRef').classList.remove('hidden');
     };
     r.readAsDataURL(f);
   });
@@ -380,6 +398,7 @@ function loadImage(f) {
   r.onload = () => {
     imgB64 = r.result.split(',')[1];
     $('preview').innerHTML = '<img src="' + r.result + '">';
+    $('clrImg').classList.remove('hidden');
     const img = new Image();
     img.onload = () => {
       const ratio = img.width / img.height;
