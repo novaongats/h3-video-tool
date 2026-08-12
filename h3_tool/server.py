@@ -17,7 +17,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "2.4.2"
+SELF_VERSION = "2.5.0"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -134,7 +134,9 @@ def runpod_call(cfg, path, method="GET", body=None):
 
 NETWORK_VOLUME_ID = "qqvwtszok9"  # 日本(AP-JP-1) minimax-h3-jp
 POD_IMAGE = "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404"
-POD_GPU = "NVIDIA H100 80GB HBM3"
+# 優先順。H100が満席のときは同じDC内のH200($4.59/h)に自動フォールバック
+POD_GPUS = ["NVIDIA H100 80GB HBM3", "NVIDIA H200"]
+POD_GPU = POD_GPUS[0]
 POD_START_CMD = ["bash", "-c", "(sleep 15 && /workspace/start_comfyui.sh) & exec /start.sh"]
 
 
@@ -163,7 +165,7 @@ def create_replacement_pod(cfg):
     body = {
         "name": "minimax-h3-pod-auto",
         "imageName": POD_IMAGE,
-        "gpuTypeIds": [POD_GPU],
+        "gpuTypeIds": POD_GPUS,
         "gpuCount": 1,
         "cloudType": "SECURE",
         "networkVolumeId": NETWORK_VOLUME_ID,
@@ -484,9 +486,10 @@ def run_generation(params, image_blob, image_name):
         if mode == "r2v":
             import base64
             refs = params.get("ref_images") or []
+            ref_video_b64 = params.get("ref_video_b64")
             if not refs:
                 raise RunPodError("参照画像が選択されていません（1〜4枚）")
-            set_job(state="uploading", message="参照画像をアップロード中…")
+            set_job(state="uploading", message="参照素材をアップロード中…")
             for i, ref in enumerate(refs[:4]):
                 blob = base64.b64decode(ref["b64"])
                 up = comfy_upload_image(cfg, ref.get("name") or f"ref{i}.png", blob)
@@ -497,8 +500,23 @@ def run_generation(params, image_blob, image_name):
                                "class_type": "LoadImage", "_meta": {"title": f"参照画像{i + 1}"}}
                 wf["136"]["inputs"][f"ref_images.ref_image_{i}"] = [node_id, 0]
             pics = "、".join(f"<Picture {i + 1}>" for i in range(len(refs[:4])))
-            prompt_text = (f"参照画像（{pics}）に写っている人物・キャラクターと完全に同一の外見"
-                           f"（顔、髪型、体型、服装）を維持して登場させる。\n\n" + prompt_text)
+            if ref_video_b64:
+                # 動画編集モード: 元動画の動きを維持して人物の外見だけ差し替える
+                set_job(state="uploading", message="元動画をアップロード中…（サイズにより数十秒）")
+                vup = comfy_upload_image(cfg, params.get("ref_video_name") or "ref_video.mp4",
+                                         base64.b64decode(ref_video_b64))
+                vname = vup.get("name")
+                vsub = vup.get("subfolder") or ""
+                wf["210"] = {"inputs": {"file": (vsub + "/" + vname) if vsub else vname},
+                             "class_type": "LoadVideo", "_meta": {"title": "元動画"}}
+                wf["136"]["inputs"]["ref_videos.ref_video_0"] = ["210", 0]
+                prompt_text = (f"[video editing + attribute transfer] <Video 1>の映像の動き、カメラワーク、構図、"
+                               f"シーンの進行、タイミングを完全に維持する。その上で、映像内の人物の外見"
+                               f"（顔、髪型、体型、服装）だけを参照画像（{pics}）の人物に置き換える。"
+                               f"背景、照明、動作、カメラは<Video 1>のまま一切変えない。\n\n" + prompt_text)
+            else:
+                prompt_text = (f"参照画像（{pics}）に写っている人物・キャラクターと完全に同一の外見"
+                               f"（顔、髪型、体型、服装）を維持して登場させる。\n\n" + prompt_text)
 
         wf[ids["prompt"]]["inputs"]["prompt" if mode != "r2v" else "value"] = prompt_text
 
