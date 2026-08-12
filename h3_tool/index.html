@@ -90,7 +90,10 @@
   <!-- 生成フォーム -->
   <div class="card hidden" id="genCard">
     <div style="margin-bottom:12px">
-      <button style="width:100%;background:linear-gradient(135deg,#0e6e64,var(--ac2));font-size:14px" onclick="pasteFromGPTs()">📋 GPTs/AIの成果物を貼り付けて自動入力</button>
+      <div style="display:flex;gap:8px">
+        <button style="flex:1;background:linear-gradient(135deg,#0d8a5f,#10a37f);font-size:14px" onclick="window.open('https://chatgpt.com/g/g-6a7c6fcb9f8c8191848a4e376a1b6762-h3huroji-huronhutozhi-ren','_blank')">🤖 ① GPTsでプロンプト作成</button>
+        <button style="flex:1;background:linear-gradient(135deg,#0e6e64,var(--ac2));font-size:14px" onclick="pasteFromGPTs()">📋 ② コピーした成果物を貼り付け</button>
+      </div>
       <div class="hint" id="pasteResult"></div>
       <div id="pasteFallback" class="hidden" style="margin-top:8px">
         <textarea id="pasteBox" style="min-height:90px" placeholder="ここにGPTsの出力を貼り付けて「適用」を押してください"></textarea>
