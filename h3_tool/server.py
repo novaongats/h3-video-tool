@@ -17,7 +17,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "2.5.1"
+SELF_VERSION = "2.5.2"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -253,6 +253,34 @@ def comfy_upload_image(cfg, filename, blob):
         return json.loads(r.read())
 
 
+def friendly_comfy_error(e):
+    """ComfyUIの400エラー本文を読み、人間に分かる日本語メッセージへ変換する"""
+    try:
+        detail = json.loads(e.read().decode("utf-8", "replace"))
+    except Exception:
+        return f"【設定エラー】生成サーバーがリクエストを拒否しました（HTTP {e.code}）"
+    msgs = []
+    for nid, info in (detail.get("node_errors") or {}).items():
+        ct = info.get("class_type", "")
+        raw = "; ".join(err.get("details") or err.get("message", "") for err in info.get("errors", []))[:150]
+        if ct == "LoadVideo":
+            msgs.append("【動画エラー】元動画を読み込めませんでした。MP4形式に変換して再試行してください"
+                        "（iPhoneの.MOV等は非対応。スマホは設定→カメラ→フォーマットを「互換性優先」に）")
+        elif ct == "LoadImage":
+            msgs.append("【画像エラー】画像を読み込めませんでした。JPG/PNG形式で再選択してください")
+        elif ct == "ResolutionSelector":
+            msgs.append(f"【画面サイズエラー】画面の形の指定に問題があります（{raw}）")
+        else:
+            msgs.append(f"【設定エラー】{ct}: {raw}")
+    if not msgs:
+        err = detail.get("error") or {}
+        msgs.append("【設定エラー】" + (err.get("message") if isinstance(err, dict) else str(err))[:200])
+    return " / ".join(msgs[:3])
+
+
+VIDEO_OK_EXT = (".mp4", ".webm", ".mkv")
+
+
 def pick_aspect(cfg, ratio_label):
     """object_infoから有効なaspect_ratio選択肢を取得し、希望比率に最も近いものを返す"""
     want = {"16:9": 16 / 9, "9:16": 9 / 16, "1:1": 1.0}.get(ratio_label, 16 / 9)
@@ -420,9 +448,26 @@ def compose_prompt(p):
 def run_generation(params, image_blob, image_name):
     cfg = load_config()
     try:
-        ensure_pod_running(cfg)
-
         mode = params.get("mode", "t2v")
+
+        # ---- 事前チェック（サーバーを起動する前に安く失敗させる） ----
+        if mode in ("i2v", "flf2v") and not image_blob:
+            raise RunPodError("【入力不足】画像が選択されていません")
+        if mode == "flf2v" and not params.get("last_image_b64"):
+            raise RunPodError("【入力不足】「最後の画像」が選択されていません")
+        if mode == "r2v" and not (params.get("ref_images") or []):
+            raise RunPodError("【入力不足】参照画像が選択されていません（1〜4枚）")
+        if mode == "edit":
+            if not params.get("ref_video_b64"):
+                raise RunPodError("【入力不足】編集する元動画が選択されていません")
+            vname = (params.get("ref_video_name") or "").lower()
+            if vname and not vname.endswith(VIDEO_OK_EXT):
+                raise RunPodError(
+                    "【動画形式エラー】この動画形式は使えません（対応: MP4/WebM/MKV）。"
+                    "iPhoneの.MOV動画などはMP4に変換してから選択してください"
+                    "（無料の変換サイトやスマホアプリでOK）")
+
+        ensure_pod_running(cfg)
         wf_file = {"i2v": "wf_i2v.json", "flf2v": "wf_i2v.json",
                    "r2v": "wf_r2v.json", "edit": "wf_r2v.json"}.get(mode, "wf_t2v.json")
         with open(os.path.join(BASE_DIR, wf_file), "r", encoding="utf-8") as f:
@@ -528,8 +573,11 @@ def run_generation(params, image_blob, image_name):
         wf[ids["prompt"]]["inputs"]["prompt" if mode != "r2v" else "value"] = prompt_text
 
         set_job(state="generating", message="動画を生成中…（5秒動画で約5分。初回はさらに+2分）")
-        res = http_json(cfg["comfy_url"] + "/prompt", method="POST",
-                        body={"prompt": wf, "client_id": "h3tool"}, timeout=60)
+        try:
+            res = http_json(cfg["comfy_url"] + "/prompt", method="POST",
+                            body={"prompt": wf, "client_id": "h3tool"}, timeout=60)
+        except urllib.error.HTTPError as e:
+            raise RunPodError(friendly_comfy_error(e))
         pid = res.get("prompt_id")
         if not pid:
             raise RunPodError("生成リクエストが受け付けられませんでした: " + json.dumps(res, ensure_ascii=False)[:300])
@@ -601,8 +649,18 @@ def run_generation(params, image_blob, image_name):
             "fast": bool(params.get("fast_mode")),
         })
         set_job(state="done", message="完成！", video=local_name, error=None)
-    except Exception as e:
+    except RunPodError as e:
         set_job(state="error", message="", error=str(e))
+    except urllib.error.HTTPError as e:
+        set_job(state="error", message="",
+                error=f"【通信エラー】サーバーが応答を拒否しました（HTTP {e.code}）。もう一度お試しください")
+    except urllib.error.URLError as e:
+        set_job(state="error", message="",
+                error=f"【接続エラー】サーバーに接続できませんでした（{getattr(e, 'reason', e)}）。ネット接続とサーバー状態を確認してください")
+    except TimeoutError:
+        set_job(state="error", message="", error="【タイムアウト】処理が時間内に終わりませんでした。もう一度お試しください")
+    except Exception as e:
+        set_job(state="error", message="", error=f"【不明なエラー】{type(e).__name__}: {e}")
 
 
 # ---------- HTTPハンドラ ----------

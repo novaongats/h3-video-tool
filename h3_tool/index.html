@@ -143,7 +143,7 @@
         クリックして動画を選択（60MBまで。動き・カメラ・背景はこの動画のまま維持されます）
         <div id="refVideoPrev" style="font-size:12px;color:var(--ac2);margin-top:6px"></div>
       </div>
-      <input type="file" id="refVideo" accept="video/mp4,video/*" class="hidden">
+      <input type="file" id="refVideo" accept=".mp4,.webm,.mkv,video/mp4" class="hidden">
 
       <label class="lbl">変更後の見た目の参照画像（任意・0〜4枚。例：差し替えたい顔や服の画像）</label>
       <div class="drop" onclick="document.getElementById('editRefFiles').click()">
@@ -317,6 +317,10 @@ $('flfLast').addEventListener('change', e => {
 let refVideoB64 = null, refVideoName = null;
 $('refVideo').addEventListener('change', e => {
   const f = e.target.files[0]; if (!f) return;
+  if (!/\.(mp4|webm|mkv)$/i.test(f.name)) {
+    alert('この動画形式は使えません（対応: MP4/WebM/MKV）。\niPhoneの.MOV動画などは、無料の変換アプリ・サイトでMP4にしてから選択してください。');
+    e.target.value = ''; return;
+  }
   if (f.size > 60 * 1024 * 1024) { alert('動画は60MB以下にしてください（短く切り出すのがおすすめ）'); e.target.value = ''; return; }
   const r = new FileReader();
   r.onload = () => { refVideoB64 = r.result.split(',')[1]; refVideoName = f.name; $('refVideoPrev').textContent = '🎞️ ' + f.name + '（' + Math.round(f.size / 1024 / 1024 * 10) / 10 + 'MB）を使用'; };
