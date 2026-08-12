@@ -17,7 +17,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "2.5.4"
+SELF_VERSION = "2.5.5"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -561,7 +561,10 @@ def run_generation(params, image_blob, image_name):
             vsub = vup.get("subfolder") or ""
             wf["210"] = {"inputs": {"file": (vsub + "/" + vname) if vsub else vname},
                          "class_type": "LoadVideo", "_meta": {"title": "元動画"}}
-            wf["136"]["inputs"]["ref_videos.ref_video_0"] = ["210", 0]
+            # ref_videosは「コマ画像に分解した形(IMAGE)」を要求するため変換を挟む
+            wf["211"] = {"inputs": {"video": ["210", 0]},
+                         "class_type": "GetVideoComponents", "_meta": {"title": "動画をコマに分解"}}
+            wf["136"]["inputs"]["ref_videos.ref_video_0"] = ["211", 0]
             if refs:
                 target = f"変更後の見た目は参照画像（{pics}）に完全に合わせる。"
             else:
