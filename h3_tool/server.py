@@ -17,7 +17,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "2.5.7"
+SELF_VERSION = "2.5.8"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -587,11 +587,25 @@ def run_generation(params, image_blob, image_name):
 
         deadline = time.time() + 2400
         entry = None
+        fails = 0
         while time.time() < deadline:
             time.sleep(8)
             try:
                 hist = comfy_get(cfg, f"/history/{pid}", timeout=30)
+                fails = 0
             except Exception:
+                fails += 1
+                if fails >= 5:  # 約40秒連続で応答なし → サーバーの生死を確認
+                    try:
+                        if pod_status(cfg) != "RUNNING":
+                            raise RunPodError(
+                                "【中断】生成の途中でサーバーが停止しました（クラウド側の障害、"
+                                "または誰かが停止した可能性）。動画は次回サーバー起動時に回収できる"
+                                "場合があります。もう一度生成するか、Claudeに相談してください")
+                    except RunPodError as re:
+                        if "中断" in str(re):
+                            raise
+                    fails = 0
                 continue
             if pid in hist:
                 entry = hist[pid]

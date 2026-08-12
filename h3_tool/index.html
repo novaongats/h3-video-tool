@@ -600,8 +600,18 @@ async function poll() {
       $('errCard').classList.remove('hidden');
       $('errMsg').textContent = job.error;
     }
-  } catch (e) { /* サーバー再起動待ちなど */ }
+    pollFails = 0;
+  } catch (e) {
+    // ローカルサーバーに繋がらない（再起動・停止中など）
+    pollFails++;
+    if (pollFails >= 3) {
+      $('podLed').className = 'led off';
+      $('podText').textContent = '⚠️ ツールと接続が切れました。ページを再読み込み（F5）してください';
+      $('progCard').classList.add('hidden');
+    }
+  }
 }
+let pollFails = 0;
 
 let HIST = [];
 async function refreshGallery() {
