@@ -91,7 +91,18 @@
     <div class="tabs">
       <div class="tab sel" id="tab_t2v" onclick="setMode('t2v')">📝 文章から</div>
       <div class="tab" id="tab_i2v" onclick="setMode('i2v')">🖼️ 画像を動かす</div>
+      <div class="tab" id="tab_flf2v" onclick="setMode('flf2v')">🎬 始点→終点</div>
       <div class="tab" id="tab_r2v" onclick="setMode('r2v')">👤 人物固定</div>
+    </div>
+
+    <div id="flfArea" class="hidden">
+      <label class="lbl">最初の画像（動画のスタート地点）</label>
+      <div class="drop" onclick="document.getElementById('flfFirst').click()">クリックして画像を選択<div id="flfFirstPrev"></div></div>
+      <input type="file" id="flfFirst" accept="image/*" class="hidden">
+      <label class="lbl">最後の画像（動画のゴール地点）</label>
+      <div class="drop" onclick="document.getElementById('flfLast').click()">クリックして画像を選択<div id="flfLastPrev"></div></div>
+      <input type="file" id="flfLast" accept="image/*" class="hidden">
+      <div class="hint">2枚の画像の間を滑らかに繋ぐ動画を作ります（変身前→変身後、昼→夜、商品の角度A→角度B など）。プロンプトには「どう繋がってほしいか」を書くと効きます。</div>
     </div>
 
     <div id="imgArea" class="hidden">
@@ -180,6 +191,11 @@
         <input type="checkbox" id="noText" checked style="width:18px;height:18px;accent-color:var(--ac)">
         画面に文字・ロゴ・透かしを出さない（推奨）
       </label>
+
+      <label class="lbl" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="fastMode" style="width:18px;height:18px;accent-color:var(--ac2)">
+        ⚡ 高速モード（約1.5〜2倍速で費用も削減。画質・動きがわずかに変わる場合あり）
+      </label>
     </details>
 
     <label class="lbl" style="display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -231,12 +247,25 @@ function $(id) { return document.getElementById(id); }
 
 function setMode(m) {
   mode = m;
-  $('tab_t2v').classList.toggle('sel', m === 't2v');
-  $('tab_i2v').classList.toggle('sel', m === 'i2v');
-  $('tab_r2v').classList.toggle('sel', m === 'r2v');
+  ['t2v', 'i2v', 'flf2v', 'r2v'].forEach(t => $('tab_' + t).classList.toggle('sel', m === t));
   $('imgArea').classList.toggle('hidden', m !== 'i2v');
+  $('flfArea').classList.toggle('hidden', m !== 'flf2v');
   $('refArea').classList.toggle('hidden', m !== 'r2v');
 }
+
+let flfFirstB64 = null, flfFirstName = null, flfLastB64 = null, flfLastName = null;
+$('flfFirst').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { flfFirstB64 = r.result.split(',')[1]; flfFirstName = f.name; $('flfFirstPrev').innerHTML = '<img src="' + r.result + '">'; };
+  r.readAsDataURL(f);
+});
+$('flfLast').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { flfLastB64 = r.result.split(',')[1]; flfLastName = f.name; $('flfLastPrev').innerHTML = '<img src="' + r.result + '">'; };
+  r.readAsDataURL(f);
+});
 
 let refImages = [];
 $('refFiles').addEventListener('change', e => {
@@ -328,6 +357,7 @@ async function generate() {
   const prompt = $('prompt').value.trim();
   if (!prompt) { alert('動画の内容を入力してください'); return; }
   if (mode === 'i2v' && !imgB64) { alert('画像を選択してください'); return; }
+  if (mode === 'flf2v' && (!flfFirstB64 || !flfLastB64)) { alert('最初と最後の画像を両方選択してください'); return; }
   if (mode === 'r2v' && refImages.length === 0) { alert('参照画像を1枚以上選択してください'); return; }
   $('doneCard').classList.add('hidden');
   $('errCard').classList.add('hidden');
@@ -335,8 +365,12 @@ async function generate() {
     await api('/api/generate', { method: 'POST', body: JSON.stringify({
       mode, prompt, seconds: +$('seconds').value, aspect,
       auto_stop: $('autoStop').checked,
-      image_b64: mode === 'i2v' ? imgB64 : null, image_name: imgName,
+      image_b64: mode === 'i2v' ? imgB64 : mode === 'flf2v' ? flfFirstB64 : null,
+      image_name: mode === 'flf2v' ? flfFirstName : imgName,
+      last_image_b64: mode === 'flf2v' ? flfLastB64 : null,
+      last_image_name: flfLastName,
       ref_images: mode === 'r2v' ? refImages : null,
+      fast_mode: $('fastMode').checked,
       dialogue: $('dialogue').value, voice: $('voice').value,
       bgm: $('bgm').value, se: $('se').value, mix: $('mix').value,
       quality_mp: $('qualityMp').value, steps: $('steps').value,
@@ -396,7 +430,7 @@ async function refreshGallery() {
       <div style="display:flex;gap:12px;background:var(--card2);border-radius:10px;padding:10px;margin-bottom:10px;flex-wrap:wrap">
         <video src="/videos/${encodeURIComponent(e.video)}" controls preload="metadata" style="width:220px;margin:0;flex-shrink:0"></video>
         <div style="flex:1;min-width:200px">
-          <div style="font-size:12px;color:var(--sub)">${e.time}｜${e.mode === 'i2v' ? '🖼️画像' : e.mode === 'r2v' ? '👤人物固定' : '📝文章'}｜${e.seconds}秒｜${e.aspect}｜シード:${e.seed}</div>
+          <div style="font-size:12px;color:var(--sub)">${e.time}｜${e.mode === 'i2v' ? '🖼️画像' : e.mode === 'flf2v' ? '🎬始点→終点' : e.mode === 'r2v' ? '👤人物固定' : '📝文章'}${e.fast ? '｜⚡高速' : ''}｜${e.seconds}秒｜${e.aspect}｜シード:${e.seed}</div>
           <div style="font-size:13px;line-height:1.6;margin:6px 0;max-height:66px;overflow:hidden" id="hp${i}">${(e.prompt || '').replace(/</g, '&lt;')}</div>
           <a href="javascript:void(0)" style="font-size:12px" onclick="$('hp${i}').style.maxHeight = $('hp${i}').style.maxHeight ? '' : '66px'">全文を表示/たたむ</a>
           <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
@@ -424,7 +458,8 @@ function copyPrompt(i, btn) {
 
 function restoreEntry(i) {
   const e = HIST[i];
-  setMode(e.mode === 'r2v' ? 'r2v' : e.mode === 'i2v' ? 'i2v' : 't2v');
+  setMode(['r2v', 'i2v', 'flf2v'].includes(e.mode) ? e.mode : 't2v');
+  if ($('fastMode')) $('fastMode').checked = !!e.fast;
   $('prompt').value = e.prompt || '';
   $('dialogue').value = e.dialogue || '';
   $('voice').value = e.voice || '';

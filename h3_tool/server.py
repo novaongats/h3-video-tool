@@ -17,7 +17,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "2.1.2"
+SELF_VERSION = "2.2.0"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -39,7 +39,14 @@ def self_update():
     try:
         info = http_json(UPDATE_REPO_RAW + "/version.json", timeout=10)
         remote_v = str(info.get("version", ""))
-        if not remote_v or remote_v == SELF_VERSION:
+
+        def vtup(v):
+            try:
+                return tuple(int(x) for x in str(v).split("."))
+            except ValueError:
+                return (0,)
+        # リモートがローカルより新しい場合のみ更新（開発中のローカルを巻き戻さない）
+        if not remote_v or vtup(remote_v) <= vtup(SELF_VERSION):
             return False
         for rel in info.get("files", []):
             if ".." in rel or rel.startswith("/") or rel.startswith("\\"):
@@ -390,7 +397,7 @@ def run_generation(params, image_blob, image_name):
         ensure_pod_running(cfg)
 
         mode = params.get("mode", "t2v")
-        wf_file = {"i2v": "wf_i2v.json", "r2v": "wf_r2v.json"}.get(mode, "wf_t2v.json")
+        wf_file = {"i2v": "wf_i2v.json", "flf2v": "wf_i2v.json", "r2v": "wf_r2v.json"}.get(mode, "wf_t2v.json")
         with open(os.path.join(BASE_DIR, wf_file), "r", encoding="utf-8") as f:
             wf = json.load(f)
 
@@ -415,7 +422,7 @@ def run_generation(params, image_blob, image_name):
             pass
         wf["115"]["inputs"]["aspect_ratio"] = pick_aspect(cfg, params.get("aspect", "16:9"))
 
-        if mode == "i2v":
+        if mode in ("i2v", "flf2v"):
             if not image_blob:
                 raise RunPodError("画像が選択されていません")
             set_job(state="uploading", message="画像をアップロード中…")
@@ -423,6 +430,32 @@ def run_generation(params, image_blob, image_name):
             name = up.get("name")
             sub = up.get("subfolder") or ""
             wf["114"]["inputs"]["image"] = (sub + "/" + name) if sub else name
+
+        if mode == "flf2v":
+            import base64
+            last_b64 = params.get("last_image_b64")
+            if not last_b64:
+                raise RunPodError("「最後の画像」が選択されていません")
+            up2 = comfy_upload_image(cfg, params.get("last_image_name") or "last.png",
+                                     base64.b64decode(last_b64))
+            name2 = up2.get("name")
+            sub2 = up2.get("subfolder") or ""
+            wf["116"] = {"inputs": {"image": (sub2 + "/" + name2) if sub2 else name2},
+                         "class_type": "LoadImage", "_meta": {"title": "最後の画像"}}
+            wf["105:104"]["inputs"]["last_frame"] = ["116", 0]
+
+        if params.get("fast_mode"):
+            # EasyCache高速化ノードをモデルの直後に差し込む
+            unet_id = "127" if mode == "r2v" else "105:6"
+            wf["300"] = {"inputs": {"model": [unet_id, 0], "reuse_threshold": 0.2,
+                                    "start_percent": 0.15, "end_percent": 0.95, "verbose": False},
+                         "class_type": "EasyCache", "_meta": {"title": "EasyCache高速化"}}
+            for nid, node in wf.items():
+                if nid == "300":
+                    continue
+                m = node.get("inputs", {}).get("model")
+                if isinstance(m, list) and m and m[0] == unet_id:
+                    node["inputs"]["model"] = ["300", 0]
 
         if mode == "r2v":
             import base64
@@ -516,6 +549,7 @@ def run_generation(params, image_blob, image_name):
             "aspect": params.get("aspect", "16:9"),
             "quality_mp": params.get("quality_mp", "0.4"),
             "steps": params.get("steps", "20"),
+            "fast": bool(params.get("fast_mode")),
         })
         set_job(state="done", message="完成！", video=local_name, error=None)
     except Exception as e:
