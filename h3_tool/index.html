@@ -583,7 +583,7 @@ async function poll() {
     if (busy) {
       $('errCard').classList.add('hidden');
       $('doneCard').classList.add('hidden');
-      $('progMsg').textContent = STATE_MSG[job.state] || job.message || '処理中…';
+      $('progMsg').textContent = job.message || STATE_MSG[job.state] || '処理中…';
       if (job.started_at) {
         const m = Math.floor((Date.now()/1000 - job.started_at) / 60), sec = Math.floor((Date.now()/1000 - job.started_at) % 60);
         $('elapsed').textContent = '経過時間: ' + m + '分' + sec + '秒';

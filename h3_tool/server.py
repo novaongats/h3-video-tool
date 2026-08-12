@@ -17,7 +17,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "2.5.8"
+SELF_VERSION = "2.6.0"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -251,6 +251,22 @@ def comfy_upload_image(cfg, filename, blob):
                  "User-Agent": UA})
     with urllib.request.urlopen(req, timeout=120) as r:
         return json.loads(r.read())
+
+
+def comfy_progress(cfg):
+    """ComfyUIのログから現在のサンプリング進捗(step, total)を取得。取れなければNone。"""
+    try:
+        req = urllib.request.Request(cfg["comfy_url"] + "/internal/logs/raw",
+                                     headers={"User-Agent": UA})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            text = r.read().decode("utf-8", "replace")
+        hits = re.findall(r"(\d+)/(\d+) \[", text)
+        for cur, tot in reversed(hits):
+            if 5 <= int(tot) <= 40:  # ステップ数の範囲だけ拾う（他の進捗表示と区別）
+                return int(cur), int(tot)
+    except Exception:
+        pass
+    return None
 
 
 def friendly_comfy_error(e):
@@ -588,8 +604,28 @@ def run_generation(params, image_blob, image_name):
         deadline = time.time() + 2400
         entry = None
         fails = 0
+        last_step = 0
         while time.time() < deadline:
             time.sleep(8)
+            # 進捗の実況: 順番待ち→ステップ進捗→経過時間 の順で分かるものを表示
+            try:
+                q = comfy_get(cfg, "/queue", timeout=10)
+                pending_ids = [x[1] for x in (q.get("queue_pending") or [])]
+                if pid in pending_ids:
+                    set_job(message=f"順番待ち中…（あなたの前に{pending_ids.index(pid) + len(q.get('queue_running') or [])}件）")
+                else:
+                    prog = comfy_progress(cfg)
+                    if prog and prog[0] >= last_step:
+                        cur, tot = prog
+                        last_step = cur
+                        pct = int(cur / tot * 100)
+                        bar = "▓" * (pct // 10) + "░" * (10 - pct // 10)
+                        set_job(message=f"動画を生成中… ステップ {cur}/{tot}（{pct}%） {bar}")
+                    else:
+                        mins = int((time.time() - (JOB.get('started_at') or time.time())) // 60)
+                        set_job(message=f"動画を生成中…（経過{mins}分。モデル読み込み中か仕上げ処理中です）")
+            except Exception:
+                pass
             try:
                 hist = comfy_get(cfg, f"/history/{pid}", timeout=30)
                 fails = 0
