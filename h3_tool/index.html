@@ -89,6 +89,14 @@
 
   <!-- 生成フォーム -->
   <div class="card hidden" id="genCard">
+    <div style="margin-bottom:12px">
+      <button style="width:100%;background:linear-gradient(135deg,#0e6e64,var(--ac2));font-size:14px" onclick="pasteFromGPTs()">📋 GPTs/AIの成果物を貼り付けて自動入力</button>
+      <div class="hint" id="pasteResult"></div>
+      <div id="pasteFallback" class="hidden" style="margin-top:8px">
+        <textarea id="pasteBox" style="min-height:90px" placeholder="ここにGPTsの出力を貼り付けて「適用」を押してください"></textarea>
+        <button style="margin-top:6px" onclick="applyGPTs($('pasteBox').value); $('pasteFallback').classList.add('hidden')">適用</button>
+      </div>
+    </div>
     <div class="tabs">
       <div class="tab sel" id="tab_t2v" onclick="setMode('t2v')">📝 文章から</div>
       <div class="tab" id="tab_i2v" onclick="setMode('i2v')">🖼️ 画像を動かす</div>
@@ -326,6 +334,88 @@ function loadImage(f) {
     img.src = r.result;
   };
   r.readAsDataURL(f);
+}
+
+async function pasteFromGPTs() {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (!text || !text.trim()) throw new Error('empty');
+    applyGPTs(text);
+  } catch (e) {
+    $('pasteFallback').classList.remove('hidden');
+    $('pasteResult').textContent = 'クリップボードを読めなかったので、下の欄に貼り付けてください';
+  }
+}
+
+function applyGPTs(text) {
+  const applied = [];
+  // プロンプト本文と設定部を分離
+  const lines = text.replace(/\r/g, '').split('\n');
+  let promptStart = -1, promptEnd = lines.length;
+  lines.forEach((l, i) => {
+    if (promptStart < 0 && /プロンプト(本文|ここから)/.test(l)) promptStart = i + 1;
+    if (promptStart >= 0 && i > promptStart && /(ここまで|＝＝＝END|===END)/.test(l) && promptEnd === lines.length) promptEnd = i;
+  });
+  const settingLines = promptStart > 0 ? lines.slice(0, promptStart - 1) : lines;
+  const promptText = promptStart > 0 ? lines.slice(promptStart, promptEnd).join('\n').trim() : '';
+
+  const val = {};
+  settingLines.forEach(l => {
+    const m = l.match(/^[\s・\-*＝=]*([^:：]{1,12})[:：]\s*(.*)$/);
+    if (m) val[m[1].trim()] = m[2].trim();
+  });
+  const get = (...keys) => { for (const k of keys) { if (val[k] !== undefined) return val[k]; } return undefined; };
+  const empty = v => !v || /^（?(なし|無し|不要|N\/A|-|空欄)）?$/i.test(v);
+
+  const modeStr = get('モード', '生成モード') || '';
+  if (modeStr) {
+    const m = /始点|終点|FLF/i.test(modeStr) ? 'flf2v' : /人物|固定|R2V|参照/i.test(modeStr) ? 'r2v' : /画像/.test(modeStr) ? 'i2v' : 't2v';
+    setMode(m); applied.push('モード:' + modeStr);
+    if (m !== 't2v') applied.push('⚠️画像はご自身で選択してください');
+  }
+  if (promptText) { $('prompt').value = promptText; applied.push('プロンプト' + promptText.length + '字'); }
+
+  const sec = get('長さ', '秒数');
+  if (sec) { const n = parseInt(sec); if (n >= 4 && n <= 15) { $('seconds').value = n; applied.push(n + '秒'); } }
+
+  const asp = get('画面', '画面の形', '比率') || '';
+  if (/縦/.test(asp)) { setAspect('9:16'); applied.push('縦長'); }
+  else if (/正方/.test(asp)) { setAspect('1:1'); applied.push('正方形'); }
+  else if (/横/.test(asp)) { setAspect('16:9'); applied.push('横長'); }
+
+  const d = get('セリフ'); if (d !== undefined) { $('dialogue').value = empty(d) ? '' : d; if (!empty(d)) applied.push('セリフあり'); }
+  const v = get('声', '声の感じ'); if (v !== undefined) $('voice').value = empty(v) ? '' : v;
+  const b = get('BGM'); if (b !== undefined) { $('bgm').value = empty(b) ? '' : b; }
+  const se = get('効果音', '環境音'); if (se !== undefined) $('se').value = empty(se) ? '' : se;
+
+  const mix = get('音バランス', '音のバランス') || '';
+  if (mix) {
+    const mv = /完全|静か/.test(mix) ? 'silent' : /しゃべらせない|声なし|ナレーションなし/.test(mix) ? 'no_speech'
+      : /セリフ優先/.test(mix) ? 'voice_first' : /BGM控えめ/.test(mix) ? 'bgm_low' : /BGMなし/.test(mix) ? 'no_bgm' : 'auto';
+    $('mix').value = mv; applied.push('音:' + mix);
+  }
+  const q = get('画質') || '';
+  if (q) {
+    const qv = /最高/.test(q) ? '1.0' : /高/.test(q) ? '0.6' : /試/.test(q) ? '0.2' : '0.4';
+    $('qualityMp').value = qv; applied.push('画質:' + q);
+  }
+  const st = get('ステップ'); if (st) { const n = parseInt(st); if (n >= 10 && n <= 30) $('steps').value = String(n === 15 || n === 25 ? n : 20); }
+  const fast = get('高速モード', '高速') || '';
+  if (fast) { $('fastMode').checked = /ON|オン|はい|有効/i.test(fast); applied.push('高速:' + ($('fastMode').checked ? 'ON' : 'OFF')); }
+  const nt = get('文字を出さない', '文字禁止');
+  if (nt) $('noText').checked = !/OFF|オフ|いいえ|無効/i.test(nt);
+  const seed = get('シード', 'シード値');
+  $('seed').value = (seed && /^\d+$/.test(seed)) ? seed : '';
+
+  updateSec();
+  if (applied.length === 0 && !promptText) {
+    // 設定ブロックが無い＝プロンプト本文だけのコピーとみなす
+    $('prompt').value = text.trim(); updatePromptHint();
+    $('pasteResult').textContent = '✅ プロンプト本文として貼り付けました（設定は手動で選んでください）';
+  } else {
+    $('pasteResult').textContent = '✅ 自動入力完了 → ' + applied.join('｜') + '｜内容を確認して🚀を押してください';
+  }
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 async function api(path, opts) {
