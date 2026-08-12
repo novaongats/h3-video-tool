@@ -17,7 +17,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "2.5.2"
+SELF_VERSION = "2.5.3"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -744,6 +744,10 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 save_config(cfg)
                 self._send(200, {"ok": True, "pod": st})
+            elif path == "/api/clear_error":
+                if JOB["state"] == "error":
+                    set_job(state="idle", message="", error=None)
+                self._send(200, {"ok": True})
             elif path == "/api/start":
                 if JOB["state"] in ("starting_pod", "waiting_comfy", "uploading", "generating", "downloading", "stopping_pod"):
                     self._send(409, {"error": "処理が進行中です"})

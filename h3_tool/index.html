@@ -258,7 +258,10 @@
     <div class="hint" id="seedInfo"></div>
   </div>
   <div class="card hidden" id="errCard">
-    <b style="color:var(--ng)">⚠️ エラーが発生しました</b>
+    <div class="row" style="justify-content:space-between">
+      <b style="color:var(--ng)">⚠️ エラーが発生しました</b>
+      <button style="padding:6px 12px;font-size:12.5px" onclick="clearError()">✕ 閉じる</button>
+    </div>
     <div class="err" id="errMsg"></div>
     <div class="hint">・GPUの空きがない場合は時間をおいて再試行してください<br>・何度も失敗する場合はこの画面ごとClaudeに見せてください</div>
   </div>
@@ -491,6 +494,11 @@ function showMain() {
   $('genCard').classList.remove('hidden');
   $('galCard').classList.remove('hidden');
   refreshGallery();
+}
+
+async function clearError() {
+  try { await api('/api/clear_error', { method: 'POST' }); } catch (e) {}
+  $('errCard').classList.add('hidden');
 }
 
 async function podStart() { $('btnStart').disabled = true; try { await api('/api/start', { method: 'POST' }); } catch (e) { alert(e.message); } }
