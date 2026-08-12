@@ -78,6 +78,7 @@
   <div class="card hidden" id="serverCard">
     <div class="row" style="justify-content:space-between">
       <span class="pill"><span class="led" id="podLed"></span><span id="podText">確認中…</span></span>
+      <span class="pill" id="balancePill" style="display:none">💰 <span id="balanceText"></span></span>
       <span class="row">
         <button class="btn-start" id="btnStart" onclick="podStart()">サーバー起動</button>
         <button class="btn-stop" id="btnStop" onclick="podStop()">サーバー停止</button>
@@ -393,6 +394,14 @@ async function poll() {
     else { led.className = 'led busy'; txt.textContent = 'サーバー：' + pod; }
     $('btnStart').disabled = (pod === 'RUNNING');
     $('btnStop').disabled = (pod === 'EXITED');
+
+    if (s.balance && typeof s.balance.usd === 'number') {
+      const usd = s.balance.usd, yen = Math.round(usd * 150);
+      $('balancePill').style.display = '';
+      $('balanceText').textContent = `残高 $${usd.toFixed(2)}（約${yen.toLocaleString()}円）`;
+      $('balanceText').style.color = usd < 5 ? 'var(--ng)' : usd < 15 ? 'var(--warn)' : '';
+      $('balancePill').title = usd < 5 ? '残高が少なくなっています。管理者にチャージを依頼してください' : '';
+    }
 
     const busy = ['starting_pod','waiting_comfy','uploading','generating','downloading','stopping_pod'].includes(job.state);
     generating = busy;

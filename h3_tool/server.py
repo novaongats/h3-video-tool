@@ -17,7 +17,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "2.2.0"
+SELF_VERSION = "2.3.0"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -185,6 +185,30 @@ def create_replacement_pod(cfg):
         except Exception:
             pass  # 消せなくても実害はない（停止中Podは課金されない）
     return new_pod
+
+
+BALANCE_CACHE = {"t": 0.0, "data": None}
+
+
+def get_balance(cfg):
+    """RunPodの残高を取得（60秒キャッシュ）。失敗時はNone。"""
+    now = time.time()
+    if now - BALANCE_CACHE["t"] < 60:
+        return BALANCE_CACHE["data"]
+    try:
+        q = json.dumps({"query": "query { myself { clientBalance currentSpendPerHr } }"}).encode()
+        req = urllib.request.Request(
+            "https://api.runpod.io/graphql", data=q,
+            headers={"Content-Type": "application/json",
+                     "Authorization": "Bearer " + cfg["api_key"], "User-Agent": UA})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            d = json.loads(r.read())["data"]["myself"]
+        BALANCE_CACHE["t"] = now
+        BALANCE_CACHE["data"] = {"usd": round(float(d["clientBalance"]), 2),
+                                 "spend_per_hr": float(d.get("currentSpendPerHr") or 0)}
+    except Exception:
+        BALANCE_CACHE["t"] = now - 50  # 失敗時は10秒後に再試行
+    return BALANCE_CACHE["data"]
 
 
 def pod_status(cfg):
@@ -587,6 +611,7 @@ class Handler(BaseHTTPRequestHandler):
             if not cfg.get("api_key"):
                 out["pod"] = "NO_KEY"
             else:
+                out["balance"] = get_balance(cfg)
                 try:
                     out["pod"] = pod_status(cfg)
                 except RunPodError:
