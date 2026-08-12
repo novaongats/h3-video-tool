@@ -17,7 +17,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "2.5.6"
+SELF_VERSION = "2.5.7"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -770,6 +770,20 @@ class Handler(BaseHTTPRequestHandler):
                 threading.Thread(target=manual_start, daemon=True).start()
                 self._send(200, {"ok": True})
             elif path == "/api/stop":
+                # 誰かの生成が動いている間は停止を拒否する（共有利用の事故防止）
+                try:
+                    if comfy_alive(cfg):
+                        q = comfy_get(cfg, "/queue", timeout=10)
+                        busy = len(q.get("queue_running") or []) + len(q.get("queue_pending") or [])
+                        if busy:
+                            self._send(409, {"error": (
+                                f"いま誰かが動画を生成中のため停止しませんでした（実行中＋順番待ち: {busy}件）。"
+                                "生成が終わるのを待つか、生成した人の「自動停止」に任せてください")})
+                            return
+                except RunPodError:
+                    raise
+                except Exception:
+                    pass  # キューを確認できない場合（エンジン起動前など）は通常どおり停止できる
                 runpod_call(cfg, f"/pods/{cfg['pod_id']}/stop", method="POST")
                 self._send(200, {"ok": True})
             elif path == "/api/generate":
