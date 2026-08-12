@@ -295,11 +295,13 @@ function updateSec() {
 function updatePromptHint() {
   const len = $('prompt').value.length;
   const s = +$('seconds').value;
-  const range = s <= 6 ? '150〜400字' : '400〜900字';
-  const cuts = s <= 6 ? '2〜3個' : '4〜6個';
-  let msg = `現在 ${len}字｜${s}秒動画の目安: ${range}・カット${cuts}まで｜コツ: 重要なこと（スタイル・人物・場所）ほど先頭に書く`;
+  const cuts = s <= 6 ? '2〜3カット' : '4〜6カット';
+  let msg = `現在 ${len}字｜ラフ生成は150〜800字・${cuts}で十分｜本気の作り込みは【見出し】で構造化すれば数千字もOK（時間区切り＋カメラ指定＋「〜しない」の禁止事項をセットで）`;
   let color = '';
-  if (len > 1500) { msg += '｜⚠️ 長すぎると後半の指示が無視されがちです。要素をしぼるか秒数を増やして'; color = 'var(--warn)'; }
+  if (len > 1000 && !$('prompt').value.includes('【') && !/ショット|\[\d/.test($('prompt').value)) {
+    msg += '｜⚠️ 長文は【見出し】やショット割りで構造化しないと後半が無視されがちです';
+    color = 'var(--warn)';
+  }
   $('promptHint').textContent = msg;
   $('promptHint').style.color = color;
 }
