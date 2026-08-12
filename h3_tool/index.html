@@ -164,7 +164,7 @@
     </div>
 
     <label class="lbl">どんな動画にしたい？（日本語OK。セリフ・音・カメラの動きも書ける）</label>
-    <textarea id="prompt" placeholder="例：桜並木を歩く白い猫。カメラはゆっくり猫を追いかける。BGMは穏やかなピアノ。風で花びらが舞う。" oninput="updatePromptHint()"></textarea>
+    <textarea id="prompt" placeholder="例：実写のシネマティックな映像、夕暮れの光。桜並木を白い猫が歩いてくる。カメラはゆっくり猫に寄っていく。[3秒-] 猫が立ち止まり、花びらが舞う中で空を見上げる。BGMは穏やかなピアノ。" oninput="updatePromptHint()"></textarea>
     <div class="hint" id="promptHint"></div>
 
     <label class="lbl">長さ：<b id="secLabel">5秒</b>（長いほど時間とお金がかかる）</label>
@@ -287,6 +287,14 @@ let mode = 't2v', aspect = '16:9', imgB64 = null, imgName = null, hasKey = false
 
 function $(id) { return document.getElementById(id); }
 
+const MODE_PLACEHOLDER = {
+  t2v: '例：実写のシネマティックな映像、夕暮れの光。桜並木を白い猫が歩いてくる。カメラはゆっくり猫に寄っていく。[3秒-] 猫が立ち止まり、花びらが舞う中で空を見上げる。BGMは穏やかなピアノ。',
+  i2v: '例：この画像の女性がゆっくりカメラの方へ振り返り、優しく微笑む。髪が風で軽く揺れる。カメラはわずかに寄る。背景はそのまま。',
+  flf2v: '例：最初の画像の昼の街並みから、最後の画像の夜景へ、時間が流れるように滑らかに変化していく。カメラはゆっくり右へ移動しながら繋ぐ。',
+  r2v: '例：参照画像のキャラクターが、カフェの窓際でコーヒーを飲みながら本を読んでいる。午後の柔らかい光。ページをめくって、ふと窓の外を見る。',
+  edit: '例：人物の顔だけを参照画像の女性に自然に置き換える。髪型・服装・背景・動き・カメラワークはすべて元の動画のまま一切変えない。',
+};
+
 function setMode(m) {
   mode = m;
   ['t2v', 'i2v', 'flf2v', 'r2v', 'edit'].forEach(t => $('tab_' + t).classList.toggle('sel', m === t));
@@ -294,6 +302,7 @@ function setMode(m) {
   $('flfArea').classList.toggle('hidden', m !== 'flf2v');
   $('refArea').classList.toggle('hidden', m !== 'r2v');
   $('editArea').classList.toggle('hidden', m !== 'edit');
+  $('prompt').placeholder = MODE_PLACEHOLDER[m] || MODE_PLACEHOLDER.t2v;
 }
 
 function clearZone(z) {
