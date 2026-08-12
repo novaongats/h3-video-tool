@@ -105,6 +105,7 @@
       <div class="tab" id="tab_i2v" onclick="setMode('i2v')">🖼️ 画像を動かす</div>
       <div class="tab" id="tab_flf2v" onclick="setMode('flf2v')">🎬 始点→終点</div>
       <div class="tab" id="tab_r2v" onclick="setMode('r2v')">👤 人物固定</div>
+      <div class="tab" id="tab_edit" onclick="setMode('edit')">✂️ 部分編集</div>
     </div>
 
     <div id="flfArea" class="hidden">
@@ -134,13 +135,24 @@
       </div>
       <input type="file" id="refFiles" accept="image/*" multiple class="hidden">
       <div class="hint">このモードは参照画像の人物の見た目（顔・髪型・服装）を保ったまま、文章の内容で自由に動かせます。※通常より生成に時間がかかります（最大3倍）</div>
+    </div>
 
-      <label class="lbl">🎞️ 元動画（任意・動画編集モード）</label>
+    <div id="editArea" class="hidden">
+      <label class="lbl">🎞️ 編集する元動画（必須）</label>
       <div class="drop" onclick="document.getElementById('refVideo').click()">
-        クリックして動画を選択（この動画の動きはそのまま、人物だけ上の参照画像に差し替わります）
+        クリックして動画を選択（60MBまで。動き・カメラ・背景はこの動画のまま維持されます）
         <div id="refVideoPrev" style="font-size:12px;color:var(--ac2);margin-top:6px"></div>
       </div>
       <input type="file" id="refVideo" accept="video/mp4,video/*" class="hidden">
+
+      <label class="lbl">変更後の見た目の参照画像（任意・0〜4枚。例：差し替えたい顔や服の画像）</label>
+      <div class="drop" onclick="document.getElementById('editRefFiles').click()">
+        クリックして画像を選択（画像なし＝下の指示文だけで変更もOK）
+        <div id="editRefPreview" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap"></div>
+      </div>
+      <input type="file" id="editRefFiles" accept="image/*" multiple class="hidden">
+
+      <div class="hint">プロンプト欄に「何をどう変えるか」を書いてください（例：人物の顔だけを参照画像の女性に変える／服を赤いドレスに変える。それ以外は変えない）。※生成時間は通常の約3倍</div>
       <div class="hint" style="color:var(--warn)">⚠️ 実在の人物（有名人・知人）の動画を本人の同意なく顔・姿を差し替えることは禁止です（ライセンス違反・法的リスク）。自分たちで作った動画や、同意のある素材だけに使ってください。</div>
     </div>
 
@@ -267,11 +279,26 @@ function $(id) { return document.getElementById(id); }
 
 function setMode(m) {
   mode = m;
-  ['t2v', 'i2v', 'flf2v', 'r2v'].forEach(t => $('tab_' + t).classList.toggle('sel', m === t));
+  ['t2v', 'i2v', 'flf2v', 'r2v', 'edit'].forEach(t => $('tab_' + t).classList.toggle('sel', m === t));
   $('imgArea').classList.toggle('hidden', m !== 'i2v');
   $('flfArea').classList.toggle('hidden', m !== 'flf2v');
   $('refArea').classList.toggle('hidden', m !== 'r2v');
+  $('editArea').classList.toggle('hidden', m !== 'edit');
 }
+
+let editImages = [];
+$('editRefFiles').addEventListener('change', e => {
+  editImages = [];
+  $('editRefPreview').innerHTML = '';
+  [...e.target.files].slice(0, 4).forEach(f => {
+    const r = new FileReader();
+    r.onload = () => {
+      editImages.push({ name: f.name, b64: r.result.split(',')[1] });
+      $('editRefPreview').innerHTML += '<img src="' + r.result + '" style="max-height:80px;border-radius:6px">';
+    };
+    r.readAsDataURL(f);
+  });
+});
 
 let flfFirstB64 = null, flfFirstName = null, flfLastB64 = null, flfLastName = null;
 $('flfFirst').addEventListener('change', e => {
@@ -389,7 +416,7 @@ function applyGPTs(text) {
 
   const modeStr = get('モード', '生成モード') || '';
   if (modeStr) {
-    const m = /始点|終点|FLF/i.test(modeStr) ? 'flf2v' : /人物|固定|R2V|参照/i.test(modeStr) ? 'r2v' : /画像/.test(modeStr) ? 'i2v' : 't2v';
+    const m = /部分|編集/i.test(modeStr) ? 'edit' : /始点|終点|FLF/i.test(modeStr) ? 'flf2v' : /人物|固定|R2V|参照/i.test(modeStr) ? 'r2v' : /画像/.test(modeStr) ? 'i2v' : 't2v';
     setMode(m); applied.push('モード:' + modeStr);
     if (m !== 't2v') applied.push('⚠️画像はご自身で選択してください');
   }
@@ -472,6 +499,7 @@ async function generate() {
   if (mode === 'i2v' && !imgB64) { alert('画像を選択してください'); return; }
   if (mode === 'flf2v' && (!flfFirstB64 || !flfLastB64)) { alert('最初と最後の画像を両方選択してください'); return; }
   if (mode === 'r2v' && refImages.length === 0) { alert('参照画像を1枚以上選択してください'); return; }
+  if (mode === 'edit' && !refVideoB64) { alert('編集する元動画を選択してください'); return; }
   $('doneCard').classList.add('hidden');
   $('errCard').classList.add('hidden');
   try {
@@ -482,8 +510,8 @@ async function generate() {
       image_name: mode === 'flf2v' ? flfFirstName : imgName,
       last_image_b64: mode === 'flf2v' ? flfLastB64 : null,
       last_image_name: flfLastName,
-      ref_images: mode === 'r2v' ? refImages : null,
-      ref_video_b64: mode === 'r2v' ? refVideoB64 : null,
+      ref_images: mode === 'r2v' ? refImages : mode === 'edit' ? editImages : null,
+      ref_video_b64: mode === 'edit' ? refVideoB64 : null,
       ref_video_name: refVideoName,
       fast_mode: $('fastMode').checked,
       dialogue: $('dialogue').value, voice: $('voice').value,
@@ -553,7 +581,7 @@ async function refreshGallery() {
       <div style="display:flex;gap:12px;background:var(--card2);border-radius:10px;padding:10px;margin-bottom:10px;flex-wrap:wrap">
         <video src="/videos/${encodeURIComponent(e.video)}" controls preload="metadata" style="width:220px;margin:0;flex-shrink:0"></video>
         <div style="flex:1;min-width:200px">
-          <div style="font-size:12px;color:var(--sub)">${e.time}｜${e.mode === 'i2v' ? '🖼️画像' : e.mode === 'flf2v' ? '🎬始点→終点' : e.mode === 'r2v' ? '👤人物固定' : '📝文章'}${e.fast ? '｜⚡高速' : ''}｜${e.seconds}秒｜${e.aspect}｜シード:${e.seed}</div>
+          <div style="font-size:12px;color:var(--sub)">${e.time}｜${e.mode === 'i2v' ? '🖼️画像' : e.mode === 'flf2v' ? '🎬始点→終点' : e.mode === 'r2v' ? '👤人物固定' : e.mode === 'edit' ? '✂️部分編集' : '📝文章'}${e.fast ? '｜⚡高速' : ''}｜${e.seconds}秒｜${e.aspect}｜シード:${e.seed}</div>
           <div style="font-size:13px;line-height:1.6;margin:6px 0;max-height:66px;overflow:hidden" id="hp${i}">${(e.prompt || '').replace(/</g, '&lt;')}</div>
           <a href="javascript:void(0)" style="font-size:12px" onclick="$('hp${i}').style.maxHeight = $('hp${i}').style.maxHeight ? '' : '66px'">全文を表示/たたむ</a>
           <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
@@ -581,7 +609,7 @@ function copyPrompt(i, btn) {
 
 function restoreEntry(i) {
   const e = HIST[i];
-  setMode(['r2v', 'i2v', 'flf2v'].includes(e.mode) ? e.mode : 't2v');
+  setMode(['r2v', 'i2v', 'flf2v', 'edit'].includes(e.mode) ? e.mode : 't2v');
   if ($('fastMode')) $('fastMode').checked = !!e.fast;
   $('prompt').value = e.prompt || '';
   $('dialogue').value = e.dialogue || '';

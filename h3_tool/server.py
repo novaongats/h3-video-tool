@@ -17,7 +17,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "2.5.0"
+SELF_VERSION = "2.5.1"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -423,13 +423,14 @@ def run_generation(params, image_blob, image_name):
         ensure_pod_running(cfg)
 
         mode = params.get("mode", "t2v")
-        wf_file = {"i2v": "wf_i2v.json", "flf2v": "wf_i2v.json", "r2v": "wf_r2v.json"}.get(mode, "wf_t2v.json")
+        wf_file = {"i2v": "wf_i2v.json", "flf2v": "wf_i2v.json",
+                   "r2v": "wf_r2v.json", "edit": "wf_r2v.json"}.get(mode, "wf_t2v.json")
         with open(os.path.join(BASE_DIR, wf_file), "r", encoding="utf-8") as f:
             wf = json.load(f)
 
         # ノードIDがモードで異なる
         ids = {"prompt": "105:104", "dur": "105:111", "seed": "105:15", "steps": "105:9"}
-        if mode == "r2v":
+        if mode in ("r2v", "edit"):
             ids = {"prompt": "138", "dur": "132", "seed": "129", "steps": "124"}
 
         prompt_text = compose_prompt(params)
@@ -472,7 +473,7 @@ def run_generation(params, image_blob, image_name):
 
         if params.get("fast_mode"):
             # EasyCache高速化ノードをモデルの直後に差し込む
-            unet_id = "127" if mode == "r2v" else "105:6"
+            unet_id = "127" if mode in ("r2v", "edit") else "105:6"
             wf["300"] = {"inputs": {"model": [unet_id, 0], "reuse_threshold": 0.2,
                                     "start_percent": 0.15, "end_percent": 0.95, "verbose": False},
                          "class_type": "EasyCache", "_meta": {"title": "EasyCache高速化"}}
@@ -483,11 +484,10 @@ def run_generation(params, image_blob, image_name):
                 if isinstance(m, list) and m and m[0] == unet_id:
                     node["inputs"]["model"] = ["300", 0]
 
-        if mode == "r2v":
+        if mode in ("r2v", "edit"):
             import base64
             refs = params.get("ref_images") or []
-            ref_video_b64 = params.get("ref_video_b64")
-            if not refs:
+            if mode == "r2v" and not refs:
                 raise RunPodError("参照画像が選択されていません（1〜4枚）")
             set_job(state="uploading", message="参照素材をアップロード中…")
             for i, ref in enumerate(refs[:4]):
@@ -500,23 +500,30 @@ def run_generation(params, image_blob, image_name):
                                "class_type": "LoadImage", "_meta": {"title": f"参照画像{i + 1}"}}
                 wf["136"]["inputs"][f"ref_images.ref_image_{i}"] = [node_id, 0]
             pics = "、".join(f"<Picture {i + 1}>" for i in range(len(refs[:4])))
-            if ref_video_b64:
-                # 動画編集モード: 元動画の動きを維持して人物の外見だけ差し替える
-                set_job(state="uploading", message="元動画をアップロード中…（サイズにより数十秒）")
-                vup = comfy_upload_image(cfg, params.get("ref_video_name") or "ref_video.mp4",
-                                         base64.b64decode(ref_video_b64))
-                vname = vup.get("name")
-                vsub = vup.get("subfolder") or ""
-                wf["210"] = {"inputs": {"file": (vsub + "/" + vname) if vsub else vname},
-                             "class_type": "LoadVideo", "_meta": {"title": "元動画"}}
-                wf["136"]["inputs"]["ref_videos.ref_video_0"] = ["210", 0]
-                prompt_text = (f"[video editing + attribute transfer] <Video 1>の映像の動き、カメラワーク、構図、"
-                               f"シーンの進行、タイミングを完全に維持する。その上で、映像内の人物の外見"
-                               f"（顔、髪型、体型、服装）だけを参照画像（{pics}）の人物に置き換える。"
-                               f"背景、照明、動作、カメラは<Video 1>のまま一切変えない。\n\n" + prompt_text)
+
+        if mode == "r2v":
+            prompt_text = (f"参照画像（{pics}）に写っている人物・キャラクターと完全に同一の外見"
+                           f"（顔、髪型、体型、服装）を維持して登場させる。\n\n" + prompt_text)
+
+        if mode == "edit":
+            ref_video_b64 = params.get("ref_video_b64")
+            if not ref_video_b64:
+                raise RunPodError("編集する元動画が選択されていません")
+            set_job(state="uploading", message="元動画をアップロード中…（サイズにより数十秒）")
+            vup = comfy_upload_image(cfg, params.get("ref_video_name") or "ref_video.mp4",
+                                     base64.b64decode(ref_video_b64))
+            vname = vup.get("name")
+            vsub = vup.get("subfolder") or ""
+            wf["210"] = {"inputs": {"file": (vsub + "/" + vname) if vsub else vname},
+                         "class_type": "LoadVideo", "_meta": {"title": "元動画"}}
+            wf["136"]["inputs"]["ref_videos.ref_video_0"] = ["210", 0]
+            if refs:
+                target = f"変更後の見た目は参照画像（{pics}）に完全に合わせる。"
             else:
-                prompt_text = (f"参照画像（{pics}）に写っている人物・キャラクターと完全に同一の外見"
-                               f"（顔、髪型、体型、服装）を維持して登場させる。\n\n" + prompt_text)
+                target = "変更内容は以下の指示文に正確に従う。"
+            prompt_text = ("[video editing + attribute transfer] <Video 1>の映像の動き、カメラワーク、構図、"
+                           "シーンの進行、タイミング、背景、照明を完全に維持する。以下で指示された部分だけを"
+                           f"変更し、それ以外は<Video 1>のまま一切変えない。{target}\n\n" + prompt_text)
 
         wf[ids["prompt"]]["inputs"]["prompt" if mode != "r2v" else "value"] = prompt_text
 
