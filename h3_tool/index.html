@@ -140,6 +140,7 @@
       <button class="clearbtn hidden" id="clrRef" onclick="clearZone('ref')">✕ 画像を全部取り消す</button>
       <input type="file" id="refFiles" accept=".jpg,.jpeg,.png,.webp,.bmp" multiple class="hidden">
       <div class="hint">このモードは参照画像の人物の見た目（顔・髪型・服装）を保ったまま、文章の内容で自由に動かせます。※通常より生成に時間がかかります（最大3倍）</div>
+      <div class="hint">🏷️ <b>画像ごとに名前を付けて、プロンプトで「@名前」と書くとその画像を指定できます</b>（サムネイルの下の欄で名前を変更OK）。例：画像2枚に「ユキ」「レン」と名付けて→「@ユキと@レンがカフェで向かい合って話す」。人物ごとに画像を分ければ2人以上の動画も作れます。</div>
     </div>
 
     <div id="editArea" class="hidden">
@@ -164,6 +165,7 @@
       <button class="clearbtn hidden" id="clrEditRef" onclick="clearZone('editRef')">✕ 画像を全部取り消す</button>
       <input type="file" id="editRefFiles" accept=".jpg,.jpeg,.png,.webp,.bmp" multiple class="hidden">
       <div class="hint">📸 顔を差し替えるときのコツ：<b>正面の顔が大きくはっきり写った高画質の画像</b>を使ってください（顔が小さい・斜め・ぼやけていると似ません）。元動画で顔の向きが変わる場合は、正面＋横顔など複数枚入れると一致度が上がります。体型が元動画の人物と近いほど自然になります。</div>
+      <div class="hint">🏷️ <b>プロンプトでは「@元動画」（選んだ動画）と「@名前」（各画像）で指定できます</b>（サムネイルの下の欄で名前を変更OK）。例：「@元動画の人物の顔だけを@画像1の顔に置き換える」。「元動画」「参照画像」という普通の言葉で書いても自動で伝わるようにしてあります。</div>
 
       <div class="hint">プロンプト欄に「何をどう変えるか」を書いてください（例：人物の顔だけを参照画像の女性に変える／服を赤いドレスに変える。それ以外は変えない）。※生成時間は通常の約3倍</div>
       <div class="hint" style="color:var(--warn)">⚠️ 実在の人物（有名人・知人）の動画を本人の同意なく顔・姿を差し替えることは禁止です（ライセンス違反・法的リスク）。自分たちで作った動画や、同意のある素材だけに使ってください。</div>
@@ -298,8 +300,8 @@ const MODE_PLACEHOLDER = {
   t2v: '例：実写のシネマティックな映像、夕暮れの光。桜並木を白い猫が歩いてくる。カメラはゆっくり猫に寄っていく。[3秒-] 猫が立ち止まり、花びらが舞う中で空を見上げる。BGMは穏やかなピアノ。',
   i2v: '例：この画像の女性がゆっくりカメラの方へ振り返り、優しく微笑む。髪が風で軽く揺れる。カメラはわずかに寄る。背景はそのまま。',
   flf2v: '例：最初の画像の昼の街並みから、最後の画像の夜景へ、時間が流れるように滑らかに変化していく。カメラはゆっくり右へ移動しながら繋ぐ。',
-  r2v: '例：参照画像のキャラクターが、カフェの窓際でコーヒーを飲みながら本を読んでいる。午後の柔らかい光。ページをめくって、ふと窓の外を見る。',
-  edit: '例：人物の顔だけを参照画像の女性に自然に置き換える。髪型・服装・背景・動き・カメラワークはすべて元の動画のまま一切変えない。',
+  r2v: '例：@画像1の女性と@画像2の男性が、カフェの窓際で向かい合って楽しそうに話している。@画像1がコーヒーを一口飲んで微笑む。午後の柔らかい光。（画像1枚なら「@画像1の人物が〜」でOK）',
+  edit: '例：@元動画の人物の顔だけを@画像1の顔に置き換える。髪型・服装・背景・動き・カメラワークは@元動画のまま一切変えない。',
 };
 
 function setMode(m) {
@@ -322,18 +324,36 @@ function clearZone(z) {
 }
 
 let editImages = [];
+// 参照画像1枚ごとに「@名前」を付けられるサムネイルを作る（プロンプトから @名前 で呼び出せる）
+function addRefItem(arr, previewEl, clrBtnId, f) {
+  const r = new FileReader();
+  r.onload = () => {
+    const item = { name: f.name, b64: r.result.split(',')[1], tag: '画像' + (arr.length + 1) };
+    arr.push(item);
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:3px';
+    const img = document.createElement('img');
+    img.src = r.result; img.style.cssText = 'max-height:80px;border-radius:6px';
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:2px;font-size:12px;color:var(--ac2)';
+    row.textContent = '@';
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.value = item.tag;
+    inp.style.cssText = 'width:80px;font-size:12px;padding:2px 4px;border-radius:5px;border:1px solid #445;background:rgba(0,0,0,.25);color:inherit;text-align:center';
+    inp.title = 'プロンプトで @この名前 と書くとこの画像を指定できます（名前は自由に変更OK）';
+    inp.addEventListener('click', ev => ev.stopPropagation());
+    inp.addEventListener('input', () => { item.tag = inp.value.trim().replace(/^@+/, ''); });
+    row.appendChild(inp);
+    wrap.appendChild(img); wrap.appendChild(row);
+    previewEl.appendChild(wrap);
+    $(clrBtnId).classList.remove('hidden');
+  };
+  r.readAsDataURL(f);
+}
 $('editRefFiles').addEventListener('change', e => {
   editImages = [];
   $('editRefPreview').innerHTML = '';
-  [...e.target.files].slice(0, 4).forEach(f => {
-    const r = new FileReader();
-    r.onload = () => {
-      editImages.push({ name: f.name, b64: r.result.split(',')[1] });
-      $('editRefPreview').innerHTML += '<img src="' + r.result + '" style="max-height:80px;border-radius:6px">';
-      $('clrEditRef').classList.remove('hidden');
-    };
-    r.readAsDataURL(f);
-  });
+  [...e.target.files].slice(0, 4).forEach(f => addRefItem(editImages, $('editRefPreview'), 'clrEditRef', f));
 });
 
 let flfFirstB64 = null, flfFirstName = null, flfLastB64 = null, flfLastName = null;
@@ -367,15 +387,7 @@ let refImages = [];
 $('refFiles').addEventListener('change', e => {
   refImages = [];
   $('refPreview').innerHTML = '';
-  [...e.target.files].slice(0, 4).forEach(f => {
-    const r = new FileReader();
-    r.onload = () => {
-      refImages.push({ name: f.name, b64: r.result.split(',')[1] });
-      $('refPreview').innerHTML += '<img src="' + r.result + '" style="max-height:80px;border-radius:6px">';
-      $('clrRef').classList.remove('hidden');
-    };
-    r.readAsDataURL(f);
-  });
+  [...e.target.files].slice(0, 4).forEach(f => addRefItem(refImages, $('refPreview'), 'clrRef', f));
 });
 function setAspect(a) {
   aspect = a;

@@ -17,7 +17,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "2.6.7"
+SELF_VERSION = "2.6.8"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -568,7 +568,17 @@ def run_generation(params, image_blob, image_name):
                                "class_type": "LoadImage", "_meta": {"title": f"参照画像{i + 1}"}}
                 wf["136"]["inputs"][f"ref_images.ref_image_{i}"] = [node_id, 0]
             pics = "、".join(f"<Picture {i + 1}>" for i in range(len(refs[:4])))
-            # ユーザーが「参照画像」「元動画」と書いたら、モデルの正式タグに自動変換して確実に紐付ける
+            # 「@名前」（画像ごとの名札）をモデルの正式タグに変換する（Seedance風エレメント指定）
+            tag_map = []
+            for i, ref in enumerate(refs[:4]):
+                t = (ref.get("tag") or "").strip().lstrip("@")
+                if t:
+                    tag_map.append((t, f"<Picture {i + 1}>"))
+            if mode == "edit":
+                tag_map += [("元の動画", "<Video 1>"), ("元動画", "<Video 1>")]
+            for t, tag in sorted(tag_map, key=lambda x: -len(x[0])):  # 長い名前から先に置換（名前の前方一致対策）
+                prompt_text = prompt_text.replace("@" + t, tag)
+            # @なしの「参照画像」「元動画」という普通の言葉も正式タグに自動変換して確実に紐付ける
             if refs:
                 prompt_text = prompt_text.replace("参照画像", pics)
             if mode == "edit":
