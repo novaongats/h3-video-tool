@@ -17,7 +17,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "2.6.2"
+SELF_VERSION = "2.6.3"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -438,8 +438,12 @@ def compose_prompt(p):
     if mix in ("no_speech", "silent"):
         parts.append("この動画では誰も一切話さない。セリフ、ナレーション、実況、ボイスオーバー、"
                      "歌声、人の声を絶対に入れない。")
-    elif mix == "voice_first":
-        parts.append("音のバランス：セリフを最優先で明瞭に。他の音は控えめの音量。")
+    else:
+        if not d:
+            parts.append("指示していないセリフ・ナレーション・実況ボイスを勝手に追加しない。"
+                         "もし人物が自然に声を発する場合は必ず日本語のみ（中国語・英語の音声は禁止）。")
+        if mix == "voice_first":
+            parts.append("音のバランス：セリフを最優先で明瞭に。他の音は控えめの音量。")
 
     if p.get("no_text", True):
         parts.append("画面内に文字・字幕・ロゴ・透かしを一切出さない。")
@@ -590,6 +594,15 @@ def run_generation(params, image_blob, image_name):
                            f"変更し、それ以外は<Video 1>のまま一切変えない。{target}\n\n" + prompt_text)
 
         wf[ids["prompt"]]["inputs"]["prompt" if mode not in ("r2v", "edit") else "value"] = prompt_text
+
+        # 送信前の安全網: 仮置き文字(PLACEHOLDER)が残っていたら、設定の書き込み漏れなので送信せず止める
+        leftovers = [nid for nid, node in wf.items()
+                     for v in node.get("inputs", {}).values()
+                     if isinstance(v, str) and "PLACEHOLDER" in v]
+        if leftovers:
+            raise RunPodError("【内部エラー】設定がワークフローに反映されていません（ノード"
+                              + "、".join(leftovers) + "）。ツールの不具合のため送信前に中止しました。"
+                              "開発担当に連絡してください")
 
         set_job(state="generating", message="動画を生成中…（5秒動画で約5分。初回はさらに+2分）")
         try:
