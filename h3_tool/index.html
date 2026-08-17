@@ -16,18 +16,38 @@
   * { box-sizing:border-box; margin:0; padding:0; font-family:"Segoe UI Variable","Segoe UI","Hiragino Sans","Noto Sans JP","Meiryo",sans-serif; }
   html { scrollbar-color:#2a3148 transparent; }
   body {
-    background:var(--bg); color:var(--tx); min-height:100vh; font-size:14px;
-    background-image:radial-gradient(900px 480px at 85% -10%, rgba(109,93,252,.16), transparent 60%),
-                     radial-gradient(700px 420px at -10% 25%, rgba(56,200,245,.10), transparent 55%),
-                     radial-gradient(1000px 600px at 50% 110%, rgba(109,93,252,.07), transparent 60%),
-                     linear-gradient(180deg, #0a0d16 0%, #07090f 100%);
-    background-attachment:fixed;
+    background:linear-gradient(180deg, #090c15 0%, #06080e 100%); color:var(--tx);
+    min-height:100vh; font-size:14px; background-attachment:fixed;
+  }
+  /* 背景レイヤー1: 動くオーロラ（ゆっくり漂う光の玉） */
+  body::before {
+    content:""; position:fixed; inset:-25%; z-index:0; pointer-events:none;
+    background:radial-gradient(640px 460px at 22% 18%, rgba(109,93,252,.26), transparent 62%),
+               radial-gradient(760px 540px at 82% 8%, rgba(56,200,245,.17), transparent 60%),
+               radial-gradient(660px 520px at 62% 92%, rgba(199,93,252,.12), transparent 60%),
+               radial-gradient(500px 400px at 8% 78%, rgba(56,245,187,.08), transparent 60%);
+    filter:blur(46px); will-change:transform;
+    animation:aurora 38s ease-in-out infinite alternate;
+  }
+  @keyframes aurora {
+    0%   { transform:translate3d(0,0,0) scale(1) rotate(0deg); }
+    50%  { transform:translate3d(2.5%,-2%,0) scale(1.07) rotate(1.2deg); }
+    100% { transform:translate3d(-2.5%,2%,0) scale(1.02) rotate(-1.2deg); }
+  }
+  /* 背景レイヤー2: 上部からフェードする微細グリッド（奥行き） */
+  body::after {
+    content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
+    background-image:linear-gradient(rgba(148,163,255,.055) 1px, transparent 1px),
+                     linear-gradient(90deg, rgba(148,163,255,.055) 1px, transparent 1px);
+    background-size:46px 46px;
+    -webkit-mask-image:radial-gradient(ellipse 85% 65% at 50% -5%, #000 0%, transparent 72%);
+    mask-image:radial-gradient(ellipse 85% 65% at 50% -5%, #000 0%, transparent 72%);
   }
   .hidden { display:none !important; }
   a { color:var(--ac2); text-decoration:none; }
 
   /* ---------- レイアウト ---------- */
-  .app { display:flex; min-height:100vh; }
+  .app { display:flex; min-height:100vh; position:relative; z-index:1; }
   .side {
     width:216px; flex-shrink:0; padding:22px 14px; position:sticky; top:0; height:100vh;
     display:flex; flex-direction:column; gap:4px; border-right:1px solid var(--line);
