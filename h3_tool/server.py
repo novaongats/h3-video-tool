@@ -17,13 +17,15 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "2.6.8"
+SELF_VERSION = "2.7.0"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
 OUTPUT_DIR = os.path.join(ROOT_DIR, "outputs")
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
+ELEMENTS_DIR = os.path.join(BASE_DIR, "elements")   # エレメント（登録した人物・場所など）の画像置き場
+ELEMENTS_FILE = os.path.join(BASE_DIR, "elements.json")
 PORT = 8787
 
 DEFAULT_CONFIG = {
@@ -363,6 +365,22 @@ def append_history(record):
             json.dump(hist, f, ensure_ascii=False, indent=1)
 
 
+def load_elements():
+    """登録済みエレメント（人物・場所などの参照素材）の一覧を読む"""
+    if os.path.exists(ELEMENTS_FILE):
+        try:
+            with open(ELEMENTS_FILE, "r", encoding="utf-8-sig") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
+
+
+def save_elements(items):
+    with open(ELEMENTS_FILE, "w", encoding="utf-8") as f:
+        json.dump(items, f, ensure_ascii=False, indent=1)
+
+
 def set_job(**kw):
     with JOB_LOCK:
         JOB.update(kw)
@@ -476,8 +494,18 @@ def run_generation(params, image_blob, image_name):
             raise RunPodError("【入力不足】画像が選択されていません")
         if mode == "flf2v" and not params.get("last_image_b64"):
             raise RunPodError("【入力不足】「最後の画像」が選択されていません")
-        if mode == "r2v" and not (params.get("ref_images") or []):
-            raise RunPodError("【入力不足】参照画像が選択されていません（1〜4枚）")
+        # ---- エレメント（登録済みの人物・場所など）の読み込みとエンジン切替 ----
+        element_ids = params.get("element_ids") or []
+        elements = [e for e in load_elements() if e.get("id") in element_ids] if element_ids else []
+        if elements and mode in ("i2v", "flf2v"):
+            raise RunPodError("【エレメント非対応】「画像を動かす」「始点→終点」はAIの仕様上エレメントを併用できません。"
+                              "エレメントを使う場合は「文章から」「人物固定」「部分編集」をご利用ください")
+        if elements and mode == "t2v":
+            # エレメント使用時は参照対応エンジン（人物固定と同じ）で生成する
+            mode = "r2v"
+
+        if mode == "r2v" and not (params.get("ref_images") or []) and not elements:
+            raise RunPodError("【入力不足】参照画像が選択されていません（エレメントを選ぶか、画像を1〜4枚選択）")
         if mode == "edit":
             if not params.get("ref_video_b64"):
                 raise RunPodError("【入力不足】編集する元動画が選択されていません")
@@ -552,39 +580,71 @@ def run_generation(params, image_blob, image_name):
 
         if mode in ("r2v", "edit"):
             import base64
-            refs = params.get("ref_images") or []
-            if mode == "r2v" and not refs:
-                raise RunPodError("参照画像が選択されていません（1〜4枚）")
+            manual_refs = (params.get("ref_images") or [])[:4]
+            # エレメントの画像 + その場で選んだ画像 を1つの参照リストに統合する
+            all_refs = []       # [{"fname":…, "blob":…}]
+            elem_slots = []     # (エレメント, [参照リスト上のindex,…])
+            for el in elements:
+                idxs = []
+                for fn in el.get("images", [])[:3]:
+                    fp = os.path.join(ELEMENTS_DIR, fn)
+                    if os.path.exists(fp):
+                        with open(fp, "rb") as f:
+                            all_refs.append({"fname": fn, "blob": f.read()})
+                        idxs.append(len(all_refs) - 1)
+                if idxs:
+                    elem_slots.append((el, idxs))
+            manual_slots = []   # (@名札, 参照リスト上のindex)
+            for ref in manual_refs:
+                all_refs.append({"fname": ref.get("name") or "ref.png", "blob": base64.b64decode(ref["b64"])})
+                manual_slots.append(((ref.get("tag") or "").strip().lstrip("@"), len(all_refs) - 1))
+            if mode == "r2v" and not all_refs:
+                raise RunPodError("参照画像が選択されていません（エレメントを選ぶか、画像を1〜4枚選択）")
+            if len(all_refs) > 8:
+                raise RunPodError(f"参照画像が多すぎます（エレメント含め合計8枚まで。現在{len(all_refs)}枚）。"
+                                  "エレメントや画像を減らしてください")
             # 参照画像を縮小せず高解像度のまま渡す（顔の一致度が大きく向上する公式推奨設定）
             wf["136"]["inputs"]["ref_image_size"] = "max"
             set_job(state="uploading", message="参照素材をアップロード中…")
-            for i, ref in enumerate(refs[:4]):
-                blob = base64.b64decode(ref["b64"])
-                up = comfy_upload_image(cfg, ref.get("name") or f"ref{i}.png", blob)
+            for i, ref in enumerate(all_refs):
+                up = comfy_upload_image(cfg, ref["fname"], ref["blob"])
                 name = up.get("name")
                 sub = up.get("subfolder") or ""
                 node_id = str(200 + i)
                 wf[node_id] = {"inputs": {"image": (sub + "/" + name) if sub else name},
                                "class_type": "LoadImage", "_meta": {"title": f"参照画像{i + 1}"}}
                 wf["136"]["inputs"][f"ref_images.ref_image_{i}"] = [node_id, 0]
-            pics = "、".join(f"<Picture {i + 1}>" for i in range(len(refs[:4])))
-            # 「@名前」（画像ごとの名札）をモデルの正式タグに変換する（Seedance風エレメント指定）
+            pics = "、".join(f"<Picture {i + 1}>" for i in range(len(all_refs)))
+
+            # --- Seedance流：素材ごとに役割を宣言し、「@名前」で本文から呼べるようにする ---
+            ELEM_ROLE = {"人物": "本文に登場するこの人物の顔・髪型・体型・雰囲気は、この画像と完全に同一にする",
+                         "場所": "シーンの場所・背景として、この画像の場所を正確に再現する",
+                         "物": "この物・衣装を形・色・質感まで正確に再現して登場させる",
+                         "スタイル": "映像全体の画風・色調・質感をこの画像の雰囲気に合わせる"}
+            defs = []
             tag_map = []
-            for i, ref in enumerate(refs[:4]):
-                t = (ref.get("tag") or "").strip().lstrip("@")
+            for el, idxs in elem_slots:
+                pstr = "、".join(f"<Picture {i + 1}>" for i in idxs)
+                role = ELEM_ROLE.get(el.get("type") or "人物", "この画像を参照素材として使う")
+                memo = f"。補足情報: {el['memo']}" if el.get("memo") else ""
+                defs.append(f"「{el['name']}」（{el.get('type', '人物')}）= {pstr}。{role}{memo}")
+                tag_map.append((el["name"], f"「{el['name']}」"))
+            for t, idx in manual_slots:
                 if t:
-                    tag_map.append((t, f"<Picture {i + 1}>"))
+                    tag_map.append((t, f"<Picture {idx + 1}>"))
             if mode == "edit":
                 tag_map += [("元の動画", "<Video 1>"), ("元動画", "<Video 1>")]
             for t, tag in sorted(tag_map, key=lambda x: -len(x[0])):  # 長い名前から先に置換（名前の前方一致対策）
                 prompt_text = prompt_text.replace("@" + t, tag)
             # @なしの「参照画像」「元動画」という普通の言葉も正式タグに自動変換して確実に紐付ける
-            if refs:
+            if all_refs:
                 prompt_text = prompt_text.replace("参照画像", pics)
             if mode == "edit":
                 prompt_text = prompt_text.replace("元の動画", "<Video 1>").replace("元動画", "<Video 1>")
+            if defs:
+                prompt_text = "参照素材の役割定義:\n- " + "\n- ".join(defs) + "\n\n" + prompt_text
 
-        if mode == "r2v":
+        if mode == "r2v" and not elem_slots:
             prompt_text = (f"参照画像（{pics}）に写っている人物・キャラクターと完全に同一の外見"
                            f"（顔、髪型、体型、服装）を維持して登場させる。\n\n" + prompt_text)
 
@@ -609,7 +669,7 @@ def run_generation(params, image_blob, image_name):
             wf["211"] = {"inputs": {"video": ["210", 0]},
                          "class_type": "GetVideoComponents", "_meta": {"title": "動画をコマに分解"}}
             wf["136"]["inputs"]["ref_videos.ref_video_0"] = ["211", 0]
-            if refs:
+            if all_refs:
                 target = (f"人物の指定された部分だけを{pics}の人物に置き換える。顔立ち・目鼻・輪郭・肌の色は、"
                           f"クリップの最初から最後まで一貫して{pics}に完全一致させること。"
                           f"<Video 1>に映っている元の人物の顔は一切残さず、使用しない。"
@@ -784,6 +844,8 @@ def run_generation(params, image_blob, image_name):
             "steps": params.get("steps", "20"),
             "fast": bool(params.get("fast_mode")),
             "keep_audio": bool(params.get("keep_audio")),
+            "elements": [e.get("name") for e in elements],
+            "element_ids": element_ids,
         })
         set_job(state="done", message="完成！" + audio_note, video=local_name, error=None)
     except RunPodError as e:
@@ -852,6 +914,17 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, out)
         elif path == "/api/history":
             self._send(200, {"history": list(reversed(load_history()))})
+        elif path == "/api/elements":
+            self._send(200, {"elements": load_elements()})
+        elif path.startswith("/elements/"):
+            name = os.path.basename(path[len("/elements/"):])
+            fp = os.path.join(ELEMENTS_DIR, name)
+            if os.path.exists(fp):
+                ctype = "image/png" if name.lower().endswith(".png") else "image/jpeg"
+                with open(fp, "rb") as f:
+                    self._send(200, f.read(), ctype)
+            else:
+                self._send(404, {"error": "not found"})
         elif path == "/api/videos":
             files = sorted((f for f in os.listdir(OUTPUT_DIR) if f.lower().endswith(".mp4")), reverse=True)
             self._send(200, {"videos": files[:30]})
@@ -926,6 +999,52 @@ class Handler(BaseHTTPRequestHandler):
                     pass  # キューを確認できない場合（エンジン起動前など）は通常どおり停止できる
                 runpod_call(cfg, f"/pods/{cfg['pod_id']}/stop", method="POST")
                 self._send(200, {"ok": True})
+            elif path == "/api/elements":
+                # エレメント登録: {name, type, memo, images: [{name, b64}, ...]}
+                import base64
+                data = json.loads(raw)
+                ename = (data.get("name") or "").strip().lstrip("@")
+                if not ename:
+                    self._send(400, {"error": "エレメントの名前を入力してください"})
+                    return
+                images = data.get("images") or []
+                if not images:
+                    self._send(400, {"error": "画像を1枚以上選択してください"})
+                    return
+                items = load_elements()
+                if any(x.get("name") == ename for x in items):
+                    self._send(400, {"error": f"「{ename}」という名前は登録済みです。別の名前にするか、先に削除してください"})
+                    return
+                os.makedirs(ELEMENTS_DIR, exist_ok=True)
+                eid = "el" + time.strftime("%Y%m%d%H%M%S")
+                fnames = []
+                for i, img in enumerate(images[:3]):
+                    ext = ".png" if (img.get("name") or "").lower().endswith(".png") else ".jpg"
+                    fn = f"{eid}_{i}{ext}"
+                    with open(os.path.join(ELEMENTS_DIR, fn), "wb") as f:
+                        f.write(base64.b64decode(img["b64"]))
+                    fnames.append(fn)
+                items.append({"id": eid, "name": ename, "type": data.get("type") or "人物",
+                              "memo": (data.get("memo") or "").strip(), "images": fnames})
+                save_elements(items)
+                self._send(200, {"ok": True, "elements": items})
+            elif path == "/api/elements/delete":
+                data = json.loads(raw)
+                items = load_elements()
+                keep = []
+                for x in items:
+                    if x.get("id") == data.get("id"):
+                        for fn in x.get("images", []):
+                            fp = os.path.join(ELEMENTS_DIR, fn)
+                            if os.path.exists(fp):
+                                try:
+                                    os.remove(fp)
+                                except OSError:
+                                    pass
+                    else:
+                        keep.append(x)
+                save_elements(keep)
+                self._send(200, {"ok": True, "elements": keep})
             elif path == "/api/generate":
                 if JOB["state"] in ("starting_pod", "waiting_comfy", "uploading", "generating", "downloading", "stopping_pod"):
                     self._send(409, {"error": "生成が進行中です"})

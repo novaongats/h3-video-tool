@@ -109,6 +109,33 @@
       <div class="tab" id="tab_edit" onclick="setMode('edit')">✂️ 部分編集</div>
     </div>
 
+    <div id="elemArea">
+      <label class="lbl">📦 エレメント（登録した人物・場所をクリックで今回の動画に使う）</label>
+      <div id="elemChips" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"></div>
+      <div class="hint" id="elemHint"></div>
+      <details id="elemMgr" style="margin-top:6px">
+        <summary style="cursor:pointer;font-size:13px;color:var(--ac2)">➕ エレメントの登録・削除（クリックで開く）</summary>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">
+          <input type="text" id="elemName" placeholder="名前（例：ユキ）" style="width:130px">
+          <select id="elemType" style="width:110px">
+            <option value="人物">👤 人物</option>
+            <option value="場所">📍 場所</option>
+            <option value="物">🧥 物・衣装</option>
+            <option value="スタイル">🎨 スタイル</option>
+          </select>
+          <input type="text" id="elemMemo" placeholder="補足メモ（例：20代女性・黒髪ロング）任意" style="flex:1;min-width:160px">
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+          <button style="font-size:13px;padding:8px 12px" onclick="document.getElementById('elemFiles').click()">🖼️ 画像を選ぶ（1〜3枚）</button>
+          <span id="elemFilesLabel" class="hint" style="margin:0"></span>
+          <button style="font-size:13px;padding:8px 14px;background:linear-gradient(135deg,#0e6e64,var(--ac2))" onclick="registerElement()">💾 この内容で登録</button>
+        </div>
+        <input type="file" id="elemFiles" accept=".jpg,.jpeg,.png,.webp,.bmp" multiple class="hidden">
+        <div class="hint">👤人物は「正面の顔が大きくはっきり写った画像」推奨（正面＋横顔の2枚だとさらに◎）。登録は消すまでずっと使い回せます（保存先はこのPCの中。PCごとに登録が必要）。</div>
+        <div id="elemList" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px"></div>
+      </details>
+    </div>
+
     <div id="flfArea" class="hidden">
       <label class="lbl">最初の画像（動画のスタート地点／JPG・PNG・WebP）</label>
       <div class="drop" onclick="document.getElementById('flfFirst').click()">クリックして画像を選択<div id="flfFirstPrev"></div></div>
@@ -312,6 +339,97 @@ function setMode(m) {
   $('refArea').classList.toggle('hidden', m !== 'r2v');
   $('editArea').classList.toggle('hidden', m !== 'edit');
   $('prompt').placeholder = MODE_PLACEHOLDER[m] || MODE_PLACEHOLDER.t2v;
+  renderElemChips();
+}
+
+// ---------- エレメント（登録した人物・場所の使い回し） ----------
+let ELEMS = [];                 // サーバーに登録済みのエレメント一覧
+let selElems = new Set();       // 今回の生成で使うエレメントのid
+let elemFilesBuf = [];          // 登録フォームで選択中の画像
+
+const ELEM_ICON = { '人物': '👤', '場所': '📍', '物': '🧥', 'スタイル': '🎨' };
+
+async function loadElems() {
+  try { const r = await api('/api/elements'); ELEMS = r.elements || []; } catch (e) { ELEMS = []; }
+  renderElemChips(); renderElemList();
+}
+
+function elemUsable() { return ['t2v', 'r2v', 'edit'].includes(mode); }
+
+function renderElemChips() {
+  const box = $('elemChips'); if (!box) return;
+  box.innerHTML = '';
+  if (!elemUsable()) {
+    $('elemHint').textContent = '※このモード（画像を動かす／始点→終点）はAIの仕様上エレメントを使えません。使う場合は「文章から」「人物固定」「部分編集」で。';
+    selElems.clear();
+    return;
+  }
+  if (ELEMS.length === 0) {
+    box.innerHTML = '<span class="hint" style="margin:0">まだ登録がありません。下の「➕エレメントの登録」から人物や場所を登録すると、ここに並びます。</span>';
+    $('elemHint').textContent = '';
+    return;
+  }
+  ELEMS.forEach(el => {
+    const chip = document.createElement('div');
+    const on = selElems.has(el.id);
+    chip.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 10px 4px 4px;border-radius:20px;cursor:pointer;border:2px solid ' + (on ? 'var(--ac2)' : '#445') + ';background:' + (on ? 'rgba(20,120,110,.25)' : 'rgba(0,0,0,.2)');
+    chip.innerHTML = '<img src="/elements/' + el.images[0] + '" style="width:30px;height:30px;object-fit:cover;border-radius:50%">' +
+      '<span style="font-size:13px">' + (on ? '✅ ' : '') + ELEM_ICON[el.type] + ' @' + el.name + '</span>';
+    chip.title = 'クリックで使用ON/OFF。プロンプトでは @' + el.name + ' と書いて指定できます';
+    chip.onclick = () => { selElems.has(el.id) ? selElems.delete(el.id) : selElems.add(el.id); renderElemChips(); };
+    box.appendChild(chip);
+  });
+  const n = selElems.size;
+  $('elemHint').textContent = n === 0 ? 'クリックで選択 → プロンプトで「@名前」と書いてその人物・場所を指定できます。'
+    : '✅ ' + n + '個を使用中。プロンプトで @名前 と書いて指定してください。' + (mode === 't2v' ? '（エレメント使用中は参照エンジンで生成されるため、時間・費用が約2〜3倍になります）' : '');
+}
+
+function renderElemList() {
+  const box = $('elemList'); if (!box) return;
+  box.innerHTML = '';
+  ELEMS.forEach(el => {
+    const card = document.createElement('div');
+    card.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px;border:1px solid #445;border-radius:10px;width:110px';
+    card.innerHTML = '<img src="/elements/' + el.images[0] + '" style="width:64px;height:64px;object-fit:cover;border-radius:8px">' +
+      '<div style="font-size:12px;text-align:center">' + ELEM_ICON[el.type] + ' @' + el.name + '</div>' +
+      (el.images.length > 1 ? '<div style="font-size:11px;color:var(--sub)">画像' + el.images.length + '枚</div>' : '');
+    const del = document.createElement('button');
+    del.textContent = '🗑️ 削除';
+    del.style.cssText = 'font-size:11px;padding:3px 8px;background:#5a2430';
+    del.onclick = async () => {
+      if (!confirm('エレメント「' + el.name + '」を削除しますか？')) return;
+      try { const r = await api('/api/elements/delete', { method: 'POST', body: JSON.stringify({ id: el.id }) }); ELEMS = r.elements || []; selElems.delete(el.id); renderElemChips(); renderElemList(); } catch (e) { alert(e.message); }
+    };
+    card.appendChild(del);
+    box.appendChild(card);
+  });
+}
+
+$('elemFiles').addEventListener('change', e => {
+  elemFilesBuf = [];
+  const files = [...e.target.files].slice(0, 3);
+  let loaded = 0;
+  files.forEach(f => {
+    const r = new FileReader();
+    r.onload = () => {
+      elemFilesBuf.push({ name: f.name, b64: r.result.split(',')[1] });
+      loaded++;
+      if (loaded === files.length) $('elemFilesLabel').textContent = '🖼️ ' + files.length + '枚選択中';
+    };
+    r.readAsDataURL(f);
+  });
+});
+
+async function registerElement() {
+  const name = $('elemName').value.trim().replace(/^@+/, '');
+  if (!name) { alert('エレメントの名前を入力してください（例：ユキ）'); return; }
+  if (elemFilesBuf.length === 0) { alert('画像を1〜3枚選択してください'); return; }
+  try {
+    const r = await api('/api/elements', { method: 'POST', body: JSON.stringify({ name, type: $('elemType').value, memo: $('elemMemo').value, images: elemFilesBuf }) });
+    ELEMS = r.elements || [];
+    $('elemName').value = ''; $('elemMemo').value = ''; $('elemFiles').value = ''; $('elemFilesLabel').textContent = ''; elemFilesBuf = [];
+    renderElemChips(); renderElemList();
+  } catch (e) { alert(e.message); }
 }
 
 function clearZone(z) {
@@ -557,7 +675,7 @@ async function generate() {
   if (!prompt) { alert('動画の内容を入力してください'); return; }
   if (mode === 'i2v' && !imgB64) { alert('画像を選択してください'); return; }
   if (mode === 'flf2v' && (!flfFirstB64 || !flfLastB64)) { alert('最初と最後の画像を両方選択してください'); return; }
-  if (mode === 'r2v' && refImages.length === 0) { alert('参照画像を1枚以上選択してください'); return; }
+  if (mode === 'r2v' && refImages.length === 0 && selElems.size === 0) { alert('エレメントを選ぶか、参照画像を1枚以上選択してください'); return; }
   if (mode === 'edit' && !refVideoB64) { alert('編集する元動画を選択してください'); return; }
   $('doneCard').classList.add('hidden');
   $('errCard').classList.add('hidden');
@@ -573,6 +691,7 @@ async function generate() {
       ref_video_b64: mode === 'edit' ? refVideoB64 : null,
       ref_video_name: refVideoName,
       keep_audio: mode === 'edit' ? $('keepAudio').checked : false,
+      element_ids: elemUsable() ? [...selElems] : [],
       fast_mode: $('fastMode').checked,
       dialogue: $('dialogue').value, voice: $('voice').value,
       bgm: $('bgm').value, se: $('se').value, mix: $('mix').value,
@@ -682,6 +801,8 @@ function restoreEntry(i) {
   setMode(['r2v', 'i2v', 'flf2v', 'edit'].includes(e.mode) ? e.mode : 't2v');
   if ($('fastMode')) $('fastMode').checked = !!e.fast;
   if ($('keepAudio')) $('keepAudio').checked = e.keep_audio === undefined ? true : !!e.keep_audio;
+  selElems = new Set((e.element_ids || []).filter(id => ELEMS.some(x => x.id === id)));
+  renderElemChips();
   $('prompt').value = e.prompt || '';
   $('dialogue').value = e.dialogue || '';
   $('voice').value = e.voice || '';
@@ -704,6 +825,7 @@ function restoreEntry(i) {
     $('autoStop').checked = c.auto_stop !== false;
     if (hasKey) { showMain(); } else { $('setup').classList.remove('hidden'); }
   } catch (e) { $('setup').classList.remove('hidden'); }
+  loadElems();
   poll();
   setInterval(poll, 4000);
 })();
