@@ -53,7 +53,7 @@
     border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20;
     background:rgba(7,9,15,.75); backdrop-filter:blur(10px);
   }
-  .content { max-width:1180px; margin:0 auto; padding:22px 18px 90px; }
+  .content { max-width:1360px; margin:0 auto; padding:22px 18px 90px; }
   #view-library { max-width:860px; margin:0 auto; }
 
   /* ---------- 共通部品 ---------- */
@@ -188,11 +188,18 @@
   /* 作成画面の2カラム（右に設定パネルを常時表示） */
   #view-settings { max-width:760px; }
   @media (min-width:1100px) {
-    #view-create { display:grid; grid-template-columns:minmax(0,1fr) 330px; grid-template-areas:"main side" "foot side"; column-gap:16px; align-items:start; }
+    #view-create { display:grid; grid-template-columns:minmax(0,1fr) 620px; grid-template-areas:"main side" "foot side"; column-gap:16px; align-items:start; }
     .cmain { grid-area:main; min-width:0; }
     .cfoot { grid-area:foot; min-width:0; }
-    .cside { grid-area:side; position:sticky; top:70px; max-height:calc(100vh - 84px); overflow-y:auto; scrollbar-width:thin; }
-    .cside details { margin:0 0 12px; background:var(--panel); }
+    .cside {
+      grid-area:side; position:sticky; top:70px; max-height:calc(100vh - 84px); overflow-y:auto; scrollbar-width:thin;
+      display:grid; grid-template-columns:1fr 1fr; gap:12px; align-items:start;
+    }
+    .cside details { margin:0; background:var(--panel); }
+    .cside label.lbl { margin:9px 0 4px; }
+    .cside .txt, .cside select.txt { padding:8px 10px; font-size:13px; }
+    .cside textarea { padding:9px; font-size:13px; }
+    .cside .hint { margin-top:4px; }
   }
 
   @media (max-width:880px) {
@@ -373,7 +380,15 @@
         <details open>
           <summary>🎙️ セリフ・音の設定</summary>
           <label class="lbl">セリフ（口の動きも自動同期）</label>
-          <textarea id="dialogue" style="min-height:56px" placeholder="例：いらっしゃいませ！本日のおすすめはこちらです。"></textarea>
+          <textarea id="dialogue" style="min-height:64px" placeholder="1人：いらっしゃいませ！本日のおすすめはこちらです。
+
+会話（1行1セリフ）：
+@ユキ：ねえ、これ見て
+@レン：おお、すごいね
+
+画面外の声：
+ナレーション：その日、街は静かだった"></textarea>
+          <div class="hint">「@名前：セリフ」で会話（2人以上OK）、「ナレーション：」で画面外の声。しゃべらせない時は下の音バランスで🔇を選択。</div>
           <label class="lbl">声の感じ</label>
           <input class="txt" id="voice" placeholder="例：明るく元気な若い女性の声">
           <label class="lbl">BGM</label>
@@ -411,11 +426,14 @@
           <input class="txt" id="seed" placeholder="空欄でOK">
           <label class="sw" style="margin-top:10px"><input type="checkbox" id="noText" checked><span class="tr"></span><span>画面に文字・ロゴを出さない（推奨）</span></label>
         </details>
+
+        <div style="grid-column:1/-1">
+          <button class="btn-main" id="btnGen" onclick="generate()">🚀 動画を生成する</button>
+          <div class="hint" id="costText" style="text-align:center"></div>
+        </div>
       </div>
 
       <div class="cfoot">
-      <button class="btn-main" id="btnGen" onclick="generate()">🚀 動画を生成する</button>
-      <div class="hint" id="costText" style="text-align:center"></div>
 
       <!-- 進捗・結果・エラー -->
       <div class="card hidden" id="progCard" style="margin-top:14px">

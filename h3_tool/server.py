@@ -17,7 +17,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "3.0.1"
+SELF_VERSION = "3.0.2"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -449,9 +449,36 @@ def compose_prompt(p):
     d = p.get("dialogue", "").strip()
     if d:
         v = p.get("voice", "").strip()
-        who = f"登場人物 (S1)（{v}）" if v else "登場人物 (S1)"
-        parts.append(f"{who} がカメラに向かってはっきりと話す。口の動きはセリフに正確に同期する："
-                     f"<d>[Japanese] {d}</d>")
+        # 「@名前：セリフ」形式の行が並んでいれば会話モード、「ナレーション：」は画面外の声として扱う
+        lines = [ln.strip() for ln in d.splitlines() if ln.strip()]
+        conv = []
+        for ln in lines:
+            m = re.match(r"^@?([^：:]{1,10})[：:]\s*(.+)$", ln)
+            if m and (ln.startswith("@") or m.group(1).strip() in ("ナレーション", "ナレーター") or len(lines) > 1):
+                conv.append((m.group(1).strip(), m.group(2).strip()))
+            else:
+                conv = None
+                break
+        if conv:
+            sid = {}
+            out_lines = []
+            for name, text in conv:
+                if name in ("ナレーション", "ナレーター"):
+                    out_lines.append("ナレーション（画面外の声。映像内の誰の口も動かさない）："
+                                     f"<d>[Japanese] {text}</d>")
+                else:
+                    if name not in sid:
+                        sid[name] = f"S{len(sid) + 1}"
+                    out_lines.append(f"{name} ({sid[name]}) が話す。口の動きをこのセリフに正確に同期："
+                                     f"<d>[Japanese] {text}</d>")
+            block = "会話・音声:\n" + "\n".join(out_lines)
+            if v:
+                block += f"\n声の指定: {v}"
+            parts.append(block)
+        else:
+            who = f"登場人物 (S1)（{v}）" if v else "登場人物 (S1)"
+            parts.append(f"{who} がカメラに向かってはっきりと話す。口の動きはセリフに正確に同期する："
+                         f"<d>[Japanese] {d}</d>")
 
     if mix in ("no_speech", "silent"):
         parts.append("この動画では誰も一切話さない。セリフ、ナレーション、実況、ボイスオーバー、"
