@@ -10,6 +10,7 @@ import re
 import sys
 import threading
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -17,7 +18,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "3.0.2"
+SELF_VERSION = "3.1.0"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -439,6 +440,36 @@ def find_video_in_history(hist_entry):
     return None
 
 
+def norm_tag(s):
+    """@名前の表記ゆれ吸収用の正規化（大文字小文字・全角半角・カタカナ→ひらがな）"""
+    s = unicodedata.normalize("NFKC", s).lower()
+    return "".join(chr(ord(c) - 0x60) if "ァ" <= c <= "ヶ" else c for c in s)
+
+
+def replace_at_tags(text, mapping):
+    """@名前 を正式タグへ置換する。mapping=[(生の名前, 置換後), …]。
+    表記ゆれ（ひらがな/カタカナ/大小文字）でも同じ長さなら一致とみなす。"""
+    entries = sorted(((name, norm_tag(name), rep) for name, rep in mapping),
+                     key=lambda x: -len(x[0]))
+    out = []
+    i = 0
+    while i < len(text):
+        if text[i] == "@":
+            for name, nname, rep in entries:
+                seg = text[i + 1:i + 1 + len(name)]
+                if len(seg) == len(name) and norm_tag(seg) == nname:
+                    out.append(rep)
+                    i += 1 + len(name)
+                    break
+            else:
+                out.append(text[i])
+                i += 1
+        else:
+            out.append(text[i])
+            i += 1
+    return "".join(out)
+
+
 def compose_prompt(p):
     """フォームの各欄から、MiniMax公式プロンプトガイド準拠の形式に組み立てる。
     公式形式: 本文（Shot構成・話者ID・<d>タグのセリフ） + overall_soundscape + non_diegetic_music
@@ -521,17 +552,18 @@ def run_generation(params, image_blob, image_name):
             raise RunPodError("【入力不足】画像が選択されていません")
         if mode == "flf2v" and not params.get("last_image_b64"):
             raise RunPodError("【入力不足】「最後の画像」が選択されていません")
-        # ---- エレメント（登録済みの人物・場所など）の読み込みとエンジン切替 ----
+        # ---- エレメント・絵コンテの読み込みとエンジン切替 ----
         element_ids = params.get("element_ids") or []
         elements = [e for e in load_elements() if e.get("id") in element_ids] if element_ids else []
-        if elements and mode in ("i2v", "flf2v"):
-            raise RunPodError("【エレメント非対応】「画像を動かす」「始点→終点」はAIの仕様上エレメントを併用できません。"
-                              "エレメントを使う場合は「文章から」「人物固定」「部分編集」をご利用ください")
-        if elements and mode == "t2v":
-            # エレメント使用時は参照対応エンジン（人物固定と同じ）で生成する
+        storyboard = (params.get("storyboard_images") or [])[:6]
+        if (elements or storyboard) and mode in ("i2v", "flf2v"):
+            raise RunPodError("【非対応】「画像を動かす」「始点→終点」はAIの仕様上エレメント・絵コンテを併用できません。"
+                              "「文章から」「人物固定」「部分編集」をご利用ください")
+        if (elements or storyboard) and mode == "t2v":
+            # エレメント・絵コンテ使用時は参照対応エンジン（人物固定と同じ）で生成する
             mode = "r2v"
 
-        if mode == "r2v" and not (params.get("ref_images") or []) and not elements:
+        if mode == "r2v" and not (params.get("ref_images") or []) and not elements and not storyboard:
             raise RunPodError("【入力不足】参照画像が選択されていません（エレメントを選ぶか、画像を1〜4枚選択）")
         if mode == "edit":
             if not params.get("ref_video_b64"):
@@ -625,6 +657,11 @@ def run_generation(params, image_blob, image_name):
             for ref in manual_refs:
                 all_refs.append({"fname": ref.get("name") or "ref.png", "blob": base64.b64decode(ref["b64"])})
                 manual_slots.append(((ref.get("tag") or "").strip().lstrip("@"), len(all_refs) - 1))
+            sb_slots = []       # 絵コンテ: カット番号順の参照リスト上のindex
+            if mode == "r2v":
+                for sb in storyboard:
+                    all_refs.append({"fname": sb.get("name") or "cut.png", "blob": base64.b64decode(sb["b64"])})
+                    sb_slots.append(len(all_refs) - 1)
             if mode == "r2v" and not all_refs:
                 raise RunPodError("参照画像が選択されていません（エレメントを選ぶか、画像を1〜4枚選択）")
             if len(all_refs) > 8:
@@ -659,10 +696,21 @@ def run_generation(params, image_blob, image_name):
             for t, idx in manual_slots:
                 if t:
                     tag_map.append((t, f"<Picture {idx + 1}>"))
+            # 絵コンテ: 各カットの構図指定として役割宣言し、@カット1 でも呼べるようにする
+            if sb_slots:
+                sec = float(params.get("seconds", 5))
+                per = max(2, round(sec / len(sb_slots)))
+                for k, idx in enumerate(sb_slots):
+                    defs.append(f"カット{k + 1} = <Picture {idx + 1}>。このカットの構図・カメラアングル・"
+                                f"人物や物の配置はこの絵コンテ画像に従う（絵柄・画風はコピーしない）")
+                    tag_map.append((f"カット{k + 1}", f"<Picture {idx + 1}>"))
+                prompt_text = (f"絵コンテ指定: 動画を{len(sb_slots)}個のカットで順番に構成する。"
+                               f"各カットは約{per}秒。カットの構図は上記の絵コンテ定義に従い、"
+                               "本文に時間指定があればそちらを優先する。\n\n" + prompt_text)
             if mode == "edit":
                 tag_map += [("元の動画", "<Video 1>"), ("元動画", "<Video 1>")]
-            for t, tag in sorted(tag_map, key=lambda x: -len(x[0])):  # 長い名前から先に置換（名前の前方一致対策）
-                prompt_text = prompt_text.replace("@" + t, tag)
+            # @名前 → 正式タグ（ひらがな/カタカナ・大文字小文字の表記ゆれも吸収）
+            prompt_text = replace_at_tags(prompt_text, tag_map)
             # @なしの「参照画像」「元動画」という普通の言葉も正式タグに自動変換して確実に紐付ける
             if all_refs:
                 prompt_text = prompt_text.replace("参照画像", pics)
@@ -671,7 +719,7 @@ def run_generation(params, image_blob, image_name):
             if defs:
                 prompt_text = "参照素材の役割定義:\n- " + "\n- ".join(defs) + "\n\n" + prompt_text
 
-        if mode == "r2v" and not elem_slots:
+        if mode == "r2v" and not elem_slots and not sb_slots:
             prompt_text = (f"参照画像（{pics}）に写っている人物・キャラクターと完全に同一の外見"
                            f"（顔、髪型、体型、服装）を維持して登場させる。\n\n" + prompt_text)
 

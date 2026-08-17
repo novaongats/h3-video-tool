@@ -17,8 +17,10 @@
   html { scrollbar-color:#2a3148 transparent; }
   body {
     background:var(--bg); color:var(--tx); min-height:100vh; font-size:14px;
-    background-image:radial-gradient(900px 480px at 85% -10%, rgba(109,93,252,.14), transparent 60%),
-                     radial-gradient(700px 420px at -10% 25%, rgba(56,200,245,.09), transparent 55%);
+    background-image:radial-gradient(900px 480px at 85% -10%, rgba(109,93,252,.16), transparent 60%),
+                     radial-gradient(700px 420px at -10% 25%, rgba(56,200,245,.10), transparent 55%),
+                     radial-gradient(1000px 600px at 50% 110%, rgba(109,93,252,.07), transparent 60%),
+                     linear-gradient(180deg, #0a0d16 0%, #07090f 100%);
     background-attachment:fixed;
   }
   .hidden { display:none !important; }
@@ -43,7 +45,10 @@
     color:var(--sub); font-size:13.5px; font-weight:600; transition:.15s; border:1px solid transparent;
   }
   .nav:hover { color:var(--tx); background:rgba(148,163,255,.06); }
-  .nav.sel { color:var(--tx); background:rgba(109,93,252,.14); border-color:rgba(109,93,252,.35); }
+  .nav.sel {
+    color:var(--tx); background:linear-gradient(90deg, rgba(109,93,252,.22), rgba(56,200,245,.08));
+    border-color:rgba(109,93,252,.4); box-shadow:inset 2.5px 0 0 var(--ac), 0 4px 14px rgba(109,93,252,.2);
+  }
   .nav .ico { font-size:16px; width:20px; text-align:center; }
   .sidefoot { margin-top:auto; padding:10px 12px; color:var(--faint); font-size:11px; }
 
@@ -57,7 +62,13 @@
   #view-library { max-width:860px; margin:0 auto; }
 
   /* ---------- 共通部品 ---------- */
-  .card { background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:18px; margin-bottom:14px; }
+  .card {
+    background:linear-gradient(180deg, rgba(148,163,255,.055) 0%, rgba(148,163,255,.015) 55%), var(--panel);
+    border:1px solid var(--line); border-radius:var(--r); padding:18px; margin-bottom:14px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 12px 28px rgba(0,0,0,.35);
+    transition:border-color .2s, transform .2s, box-shadow .2s;
+  }
+  .card:hover { border-color:var(--line2); box-shadow:inset 0 1px 0 rgba(255,255,255,.07), 0 16px 36px rgba(0,0,0,.42); }
   .pill { display:inline-flex; align-items:center; gap:7px; padding:7px 13px; border-radius:20px; font-size:12.5px; background:var(--panel2); border:1px solid var(--line); }
   .led { width:8px; height:8px; border-radius:50%; background:var(--sub); flex-shrink:0; }
   .led.on { background:var(--ok); box-shadow:0 0 8px var(--ok); }
@@ -72,14 +83,25 @@
   button:disabled { opacity:.4; cursor:not-allowed; }
   .btn-main {
     background:var(--grad); border:none; font-size:16px; padding:15px 22px; width:100%; border-radius:13px;
-    color:#fff; box-shadow:0 6px 20px rgba(109,93,252,.35); letter-spacing:.3px;
+    color:#fff; letter-spacing:.3px; position:relative; overflow:hidden;
+    box-shadow:0 8px 26px rgba(109,93,252,.42), inset 0 1px 0 rgba(255,255,255,.28);
   }
-  .btn-main:hover { filter:brightness(1.08); transform:translateY(-1px); }
+  .btn-main::after {
+    content:""; position:absolute; top:0; left:-70%; width:45%; height:100%;
+    background:linear-gradient(105deg, transparent, rgba(255,255,255,.32), transparent);
+    transform:skewX(-18deg); transition:left .5s;
+  }
+  .btn-main:hover { filter:brightness(1.07); transform:translateY(-1px); box-shadow:0 12px 32px rgba(109,93,252,.55), inset 0 1px 0 rgba(255,255,255,.28); }
+  .btn-main:hover::after { left:130%; }
   .btn-ghost { background:transparent; }
   .btn-danger { background:rgba(255,107,129,.1); border-color:rgba(255,107,129,.3); color:var(--ng); }
   .btn-start { background:rgba(47,209,147,.12); border-color:rgba(47,209,147,.35); color:var(--ok); padding:8px 14px; font-size:12.5px; }
   .btn-stop { background:rgba(255,107,129,.1); border-color:rgba(255,107,129,.3); color:var(--ng); padding:8px 14px; font-size:12.5px; }
-  h2.pagetitle { font-size:19px; margin-bottom:4px; letter-spacing:.3px; }
+  h2.pagetitle {
+    font-size:20px; margin-bottom:4px; letter-spacing:.3px;
+    background:linear-gradient(90deg, var(--tx), #a9b6ff); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+  }
+  .brand b { background:linear-gradient(90deg, #fff, #b9c4ff); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
   .pagedesc { color:var(--sub); font-size:12.5px; margin-bottom:16px; }
   label.lbl { display:block; font-size:12.5px; color:var(--sub); margin:14px 0 6px; font-weight:600; }
   textarea, input.txt, select.txt {
@@ -105,11 +127,20 @@
   .modes { display:flex; gap:8px; overflow-x:auto; padding-bottom:2px; }
   .tab {
     flex:1; min-width:100px; text-align:center; padding:12px 8px; border-radius:12px; cursor:pointer;
-    background:var(--panel); border:1px solid var(--line); font-size:12.5px; font-weight:600; color:var(--sub); transition:.15s;
+    background:linear-gradient(180deg, rgba(148,163,255,.05), transparent 60%), var(--panel);
+    border:1px solid var(--line); font-size:12.5px; font-weight:600; color:var(--sub); transition:.18s;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.05), 0 6px 16px rgba(0,0,0,.25);
   }
   .tab .tico { display:block; font-size:19px; margin-bottom:4px; }
-  .tab:hover { color:var(--tx); border-color:var(--line2); }
-  .tab.sel { color:var(--tx); border-color:rgba(109,93,252,.55); background:linear-gradient(180deg,rgba(109,93,252,.16),rgba(109,93,252,.05)); }
+  .tab .eb { display:block; font-size:9px; margin-top:3px; font-weight:600; }
+  .tab .eb.ok { color:var(--ac2); }
+  .tab .eb.ng { color:var(--faint); }
+  .tab:hover { color:var(--tx); border-color:var(--line2); transform:translateY(-2px); }
+  .tab.sel {
+    color:var(--tx); border-color:rgba(109,93,252,.6); transform:translateY(-2px);
+    background:linear-gradient(180deg,rgba(109,93,252,.2),rgba(109,93,252,.05));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.1), 0 8px 22px rgba(109,93,252,.28);
+  }
 
   /* セグメント */
   .seg { display:flex; gap:6px; background:var(--field); padding:4px; border-radius:11px; border:1px solid var(--line); }
@@ -136,7 +167,11 @@
   .chip.on { border-color:var(--ac2); background:rgba(56,200,245,.1); }
 
   /* details */
-  details { border:1px solid var(--line); border-radius:12px; padding:0 14px; margin-top:10px; background:var(--panel2); }
+  details {
+    border:1px solid var(--line); border-radius:12px; padding:0 14px; margin-top:10px;
+    background:linear-gradient(180deg, rgba(148,163,255,.045), transparent 50%), var(--panel2);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.05), 0 10px 24px rgba(0,0,0,.3);
+  }
   details summary { cursor:pointer; font-size:13px; font-weight:600; color:var(--ac2); padding:12px 0; list-style:none; }
   details summary::before { content:"▸ "; transition:.15s; }
   details[open] summary::before { content:"▾ "; }
@@ -157,8 +192,12 @@
 
   /* エレメント管理ページ */
   .egrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; }
-  .ecard { background:var(--panel); border:1px solid var(--line); border-radius:13px; padding:12px; text-align:center; transition:.15s; }
-  .ecard:hover { border-color:var(--line2); transform:translateY(-2px); }
+  .ecard {
+    background:linear-gradient(180deg, rgba(148,163,255,.05), transparent 55%), var(--panel);
+    border:1px solid var(--line); border-radius:13px; padding:12px; text-align:center; transition:.2s;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.05), 0 10px 24px rgba(0,0,0,.3);
+  }
+  .ecard:hover { border-color:rgba(109,93,252,.5); transform:translateY(-3px); box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 16px 34px rgba(0,0,0,.45); }
   .ecard img { width:100%; aspect-ratio:1; object-fit:cover; border-radius:9px; cursor:pointer; }
   .ecard .ename { font-weight:700; font-size:13.5px; margin-top:8px; }
   .ecard .etype { display:inline-block; font-size:10.5px; color:var(--ac2); border:1px solid rgba(56,200,245,.35); padding:1px 8px; border-radius:10px; margin-top:4px; }
@@ -182,6 +221,17 @@
     opacity:0; pointer-events:none; transition:.25s; box-shadow:var(--shadow);
   }
   .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* @入力補完 */
+  .acbox {
+    position:fixed; z-index:120; background:#161c2c; border:1px solid var(--line2); border-radius:12px;
+    box-shadow:0 16px 40px rgba(0,0,0,.55); overflow:hidden; max-height:240px; overflow-y:auto;
+  }
+  .acitem { display:flex; align-items:center; gap:9px; padding:8px 12px; cursor:pointer; font-size:13px; }
+  .acitem img { width:24px; height:24px; object-fit:cover; border-radius:50%; }
+  .acitem .acic { width:24px; text-align:center; font-size:15px; }
+  .acitem .acty { margin-left:auto; opacity:.6; font-size:12px; }
+  .acitem.sel, .acitem:hover { background:rgba(109,93,252,.22); }
 
   .bottomnav { display:none; }
 
@@ -250,11 +300,11 @@
       <div class="cmain">
 
       <div class="modes">
-        <div class="tab sel" id="tab_t2v" onclick="setMode('t2v')"><span class="tico">📝</span>文章から</div>
-        <div class="tab" id="tab_i2v" onclick="setMode('i2v')"><span class="tico">🖼️</span>画像を動かす</div>
-        <div class="tab" id="tab_flf2v" onclick="setMode('flf2v')"><span class="tico">🎬</span>始点→終点</div>
-        <div class="tab" id="tab_r2v" onclick="setMode('r2v')"><span class="tico">👤</span>人物固定</div>
-        <div class="tab" id="tab_edit" onclick="setMode('edit')"><span class="tico">✂️</span>部分編集</div>
+        <div class="tab sel" id="tab_t2v" onclick="setMode('t2v')"><span class="tico">📝</span>文章から<small class="eb ok">📦エレメント可</small></div>
+        <div class="tab" id="tab_i2v" onclick="setMode('i2v')"><span class="tico">🖼️</span>画像を動かす<small class="eb ng">📦不可</small></div>
+        <div class="tab" id="tab_flf2v" onclick="setMode('flf2v')"><span class="tico">🎬</span>始点→終点<small class="eb ng">📦不可</small></div>
+        <div class="tab" id="tab_r2v" onclick="setMode('r2v')"><span class="tico">👤</span>人物固定<small class="eb ok">📦エレメント可</small></div>
+        <div class="tab" id="tab_edit" onclick="setMode('edit')"><span class="tico">✂️</span>部分編集<small class="eb ok">📦エレメント可</small></div>
       </div>
 
       <!-- モード別の素材入力 -->
@@ -331,6 +381,19 @@
         </div>
         <div class="chips" id="elemChips" style="margin-top:10px"></div>
         <div class="hint" id="elemHint"></div>
+      </div>
+
+      <div class="card hidden" id="sbArea">
+        <div class="row" style="justify-content:space-between">
+          <label class="lbl" style="margin:0">🎬 絵コンテ（任意・2〜6枚）</label>
+          <button class="clearbtn hidden" id="clrSb" onclick="clearSb()" style="margin:0">✕ 全部取り消す</button>
+        </div>
+        <div class="drop" style="margin-top:10px" onclick="document.getElementById('sbFiles').click()">
+          カットの順番どおりに画像を複数選択（構図・カメラアングルの指定として使われます）
+          <div id="sbPreview" style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap"></div>
+        </div>
+        <input type="file" id="sbFiles" accept=".jpg,.jpeg,.png,.webp,.bmp" multiple class="hidden">
+        <div class="hint" id="sbHint">ラフな手描きでもOK。絵柄はコピーされず「構図・配置・アングル」だけが使われます。プロンプトには「カット1では〜、カット2では〜」とカットごとの内容を書くと最強です（@カット1 でも指定可）。</div>
       </div>
 
       <!-- プロンプト -->
@@ -550,6 +613,7 @@
   </nav>
 
   <div class="toast" id="toast"></div>
+  <div class="acbox hidden" id="acBox"></div>
 </div>
 
 <script>
@@ -591,9 +655,99 @@ function setMode(m) {
   $('flfArea').classList.toggle('hidden', m !== 'flf2v');
   $('refArea').classList.toggle('hidden', m !== 'r2v');
   $('editArea').classList.toggle('hidden', m !== 'edit');
+  $('sbArea').classList.toggle('hidden', !['t2v', 'r2v'].includes(m));
   $('prompt').placeholder = MODE_PLACEHOLDER[m] || MODE_PLACEHOLDER.t2v;
   renderElemChips();
 }
+
+// ---------- 絵コンテ ----------
+let sbImages = [];
+$('sbFiles').addEventListener('change', e => {
+  sbImages = []; $('sbPreview').innerHTML = '';
+  const files = [...e.target.files].slice(0, 6);
+  files.forEach((f, k) => {
+    const r = new FileReader();
+    r.onload = () => {
+      sbImages.push({ name: f.name, b64: r.result.split(',')[1] });
+      const w = document.createElement('div');
+      w.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:3px';
+      w.innerHTML = '<img src="' + r.result + '" style="max-height:70px;border-radius:8px;margin:0">' +
+        '<span style="font-size:11px;color:var(--ac2)">カット' + sbImages.length + '</span>';
+      $('sbPreview').appendChild(w);
+      $('clrSb').classList.remove('hidden');
+      updateSbHint();
+    };
+    r.readAsDataURL(f);
+  });
+});
+function clearSb() { sbImages = []; $('sbPreview').innerHTML = ''; $('sbFiles').value = ''; $('clrSb').classList.add('hidden'); updateSbHint(); }
+function updateSbHint() {
+  const n = sbImages.length;
+  $('sbHint').textContent = n === 0
+    ? 'ラフな手描きでもOK。絵柄はコピーされず「構図・配置・アングル」だけが使われます。プロンプトには「カット1では〜」とカットごとの内容を書くと最強です（@カット1 でも指定可）。'
+    : '🎬 ' + n + 'カット構成 → おすすめの長さ: ' + Math.min(15, n * 3) + '〜' + Math.min(15, n * 4) + '秒（長さスライダーで調整）。プロンプトにカットごとの内容（カット1では〜）を書くと精度が上がります。';
+}
+
+// ---------- @入力補完（エレメント名のオートコンプリート） ----------
+function kanaNorm(s) {
+  s = s.normalize('NFKC').toLowerCase();
+  let o = '';
+  for (const c of s) { const cc = c.codePointAt(0); o += (cc >= 0x30A1 && cc <= 0x30F6) ? String.fromCodePoint(cc - 0x60) : c; }
+  return o;
+}
+let acTarget = null, acItems = [], acIdx = 0, acStart = -1;
+function acCandidates(prefix) {
+  const list = elemUsable() ? ELEMS.map(e => ({ name: e.name, icon: ELEM_ICON[e.type], img: '/elements/' + e.images[0], id: e.id })) : [];
+  if (mode === 'edit') list.push({ name: '元動画', icon: '🎞️', img: null, id: null });
+  if (mode === 't2v' || mode === 'r2v') sbImages.forEach((_, k) => list.push({ name: 'カット' + (k + 1), icon: '🎬', img: null, id: null }));
+  const np = kanaNorm(prefix);
+  return list.filter(x => kanaNorm(x.name).startsWith(np));
+}
+function acCheck(ta) {
+  const pos = ta.selectionStart;
+  const m = ta.value.slice(0, pos).match(/@([^\s@、。，,．.！!？?（）()：:]*)$/);
+  if (!m) { acHide(); return; }
+  const cands = acCandidates(m[1]);
+  if (!cands.length) { acHide(); return; }
+  acTarget = ta; acStart = pos - m[1].length; acItems = cands; acIdx = 0;
+  acRender(ta);
+}
+function acRender(ta) {
+  const box = $('acBox'), r = ta.getBoundingClientRect();
+  box.style.left = r.left + 'px';
+  box.style.top = Math.min(window.innerHeight - 46 * Math.min(acItems.length, 5) - 10, r.bottom + 4) + 'px';
+  box.style.width = Math.min(300, r.width) + 'px';
+  box.innerHTML = acItems.map((x, i) =>
+    '<div class="acitem' + (i === acIdx ? ' sel' : '') + '" onmousedown="event.preventDefault();acPick(' + i + ')">' +
+    (x.img ? '<img src="' + x.img + '">' : '<span class="acic">' + x.icon + '</span>') +
+    '<b>@' + x.name + '</b><span class="acty">' + x.icon + '</span></div>').join('');
+  box.classList.remove('hidden');
+}
+function acHide() { $('acBox').classList.add('hidden'); acTarget = null; }
+function acPick(i) {
+  const x = acItems[i], ta = acTarget;
+  if (!ta) return;
+  const pos = ta.selectionStart;
+  ta.value = ta.value.slice(0, acStart) + x.name + ta.value.slice(pos);
+  const np = acStart + x.name.length;
+  ta.setSelectionRange(np, np);
+  acHide(); ta.focus();
+  if (x.id) { selElems.add(x.id); renderElemChips(); }  // 補完したエレメントは自動で使用ONに
+  if (ta.id === 'prompt') updatePromptHint();
+}
+['prompt', 'dialogue'].forEach(id => {
+  const ta = $(id);
+  ta.addEventListener('input', () => acCheck(ta));
+  ta.addEventListener('click', () => acCheck(ta));
+  ta.addEventListener('keydown', e => {
+    if ($('acBox').classList.contains('hidden')) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); acIdx = (acIdx + 1) % acItems.length; acRender(ta); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); acIdx = (acIdx - 1 + acItems.length) % acItems.length; acRender(ta); }
+    else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); acPick(acIdx); }
+    else if (e.key === 'Escape') { acHide(); }
+  });
+  ta.addEventListener('blur', () => setTimeout(acHide, 150));
+});
 
 // ---------- エレメント ----------
 let ELEMS = [];
@@ -965,6 +1119,7 @@ async function generate() {
       ref_video_name: refVideoName,
       keep_audio: mode === 'edit' ? $('keepAudio').checked : false,
       element_ids: elemUsable() ? [...selElems] : [],
+      storyboard_images: (mode === 't2v' || mode === 'r2v') ? sbImages : null,
       fast_mode: $('fastMode').checked,
       dialogue: $('dialogue').value, voice: $('voice').value,
       bgm: $('bgm').value, se: $('se').value, mix: $('mix').value,
@@ -1105,6 +1260,7 @@ function restoreEntry(i) {
     $('autoStop').checked = c.auto_stop !== false;
     if (!hasKey) go('settings');
   } catch (e) { go('settings'); }
+  setMode(mode);
   loadElems();
   refreshGallery();
   poll();
