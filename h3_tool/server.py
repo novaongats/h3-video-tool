@@ -17,7 +17,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "2.6.3"
+SELF_VERSION = "2.6.4"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -589,9 +589,19 @@ def run_generation(params, image_blob, image_name):
                 target = f"変更後の見た目は参照画像（{pics}）に完全に合わせる。"
             else:
                 target = "変更内容は以下の指示文に正確に従う。"
+            # 元動画で口が動いていると、AIが意味不明な言語の音声を後付けしてしまう対策。
+            # セリフ指定があればそれを、「セリフなし」指定なら無音を、どちらも無ければ自然な日本語を優先させる
+            d_edit = (params.get("dialogue") or "").strip()
+            mix_edit = params.get("mix", "auto")
+            if d_edit or mix_edit in ("no_speech", "silent"):
+                voice_rule = ""
+            else:
+                voice_rule = ("音声の規則: <Video 1>の人物が口を動かしている場合は、その口の動きに合わせて"
+                              "自然で意味の通る日本語だけを話させる。中国語・英語・実在しない言語の発話は"
+                              "絶対に禁止。口が動いていない場合は誰も話さず、環境音のみとする。")
             prompt_text = ("[video editing + attribute transfer] <Video 1>の映像の動き、カメラワーク、構図、"
                            "シーンの進行、タイミング、背景、照明を完全に維持する。以下で指示された部分だけを"
-                           f"変更し、それ以外は<Video 1>のまま一切変えない。{target}\n\n" + prompt_text)
+                           f"変更し、それ以外は<Video 1>のまま一切変えない。{target}{voice_rule}\n\n" + prompt_text)
 
         wf[ids["prompt"]]["inputs"]["prompt" if mode not in ("r2v", "edit") else "value"] = prompt_text
 
