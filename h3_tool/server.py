@@ -17,7 +17,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "2.7.0"
+SELF_VERSION = "3.0.0"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -916,6 +916,13 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {"history": list(reversed(load_history()))})
         elif path == "/api/elements":
             self._send(200, {"elements": load_elements()})
+        elif path == "/manual":
+            mp = os.path.join(ROOT_DIR, "説明書.html")
+            if os.path.exists(mp):
+                with open(mp, "r", encoding="utf-8") as f:
+                    self._send(200, f.read(), "text/html; charset=utf-8")
+            else:
+                self._send(404, {"error": "説明書が見つかりません"})
         elif path.startswith("/elements/"):
             name = os.path.basename(path[len("/elements/"):])
             fp = os.path.join(ELEMENTS_DIR, name)
@@ -1026,6 +1033,45 @@ class Handler(BaseHTTPRequestHandler):
                     fnames.append(fn)
                 items.append({"id": eid, "name": ename, "type": data.get("type") or "人物",
                               "memo": (data.get("memo") or "").strip(), "images": fnames})
+                save_elements(items)
+                self._send(200, {"ok": True, "elements": items})
+            elif path == "/api/elements/update":
+                # エレメント編集: {id, name, type, memo, images?(あれば全差し替え)}
+                import base64
+                data = json.loads(raw)
+                items = load_elements()
+                target = next((x for x in items if x.get("id") == data.get("id")), None)
+                if not target:
+                    self._send(404, {"error": "エレメントが見つかりません"})
+                    return
+                ename = (data.get("name") or "").strip().lstrip("@")
+                if not ename:
+                    self._send(400, {"error": "エレメントの名前を入力してください"})
+                    return
+                if any(x.get("name") == ename and x.get("id") != target["id"] for x in items):
+                    self._send(400, {"error": f"「{ename}」という名前は別のエレメントで使用中です"})
+                    return
+                target["name"] = ename
+                target["type"] = data.get("type") or target.get("type") or "人物"
+                target["memo"] = (data.get("memo") or "").strip()
+                new_images = data.get("images")
+                if new_images:
+                    for fn in target.get("images", []):
+                        fp = os.path.join(ELEMENTS_DIR, fn)
+                        if os.path.exists(fp):
+                            try:
+                                os.remove(fp)
+                            except OSError:
+                                pass
+                    os.makedirs(ELEMENTS_DIR, exist_ok=True)
+                    fnames = []
+                    for i, img in enumerate(new_images[:3]):
+                        ext = ".png" if (img.get("name") or "").lower().endswith(".png") else ".jpg"
+                        fn = f"{target['id']}_{i}{ext}"
+                        with open(os.path.join(ELEMENTS_DIR, fn), "wb") as f:
+                            f.write(base64.b64decode(img["b64"]))
+                        fnames.append(fn)
+                    target["images"] = fnames
                 save_elements(items)
                 self._send(200, {"ok": True, "elements": items})
             elif path == "/api/elements/delete":

@@ -3,331 +3,548 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>H3かんたん動画メーカー</title>
+<title>H3 Studio</title>
 <style>
-  :root { --bg:#0f1117; --card:#1a1d27; --card2:#232736; --tx:#e8eaf2; --sub:#9aa0b4; --ac:#6c5ce7; --ac2:#00cec9; --ok:#00b894; --ng:#ff7675; --warn:#fdcb6e; }
-  * { box-sizing:border-box; margin:0; padding:0; font-family:"Segoe UI","Hiragino Sans","Meiryo",sans-serif; }
-  body { background:var(--bg); color:var(--tx); min-height:100vh; }
-  .wrap { max-width:760px; margin:0 auto; padding:20px 16px 60px; }
-  h1 { font-size:22px; margin-bottom:4px; }
-  h1 .dot { color:var(--ac2); }
-  .sub { color:var(--sub); font-size:13px; margin-bottom:18px; }
-  .card { background:var(--card); border-radius:14px; padding:18px; margin-bottom:14px; border:1px solid #2a2e3f; }
-  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-  .pill { display:inline-flex; align-items:center; gap:7px; padding:6px 14px; border-radius:20px; font-size:13px; background:var(--card2); }
-  .pill .led { width:9px; height:9px; border-radius:50%; background:var(--sub); }
+  :root {
+    --bg:#07090f; --panel:#10141f; --panel2:#161b2a; --field:#1a2032;
+    --line:rgba(148,163,255,.12); --line2:rgba(148,163,255,.22);
+    --tx:#edf0fa; --sub:#8b93ab; --faint:#5c6379;
+    --ac:#6d5dfc; --ac2:#38c8f5; --grad:linear-gradient(135deg,#6d5dfc,#38c8f5);
+    --ok:#2fd193; --ng:#ff6b81; --warn:#f5c463;
+    --r:14px; --shadow:0 10px 30px rgba(0,0,0,.35);
+  }
+  * { box-sizing:border-box; margin:0; padding:0; font-family:"Segoe UI Variable","Segoe UI","Hiragino Sans","Noto Sans JP","Meiryo",sans-serif; }
+  html { scrollbar-color:#2a3148 transparent; }
+  body {
+    background:var(--bg); color:var(--tx); min-height:100vh; font-size:14px;
+    background-image:radial-gradient(900px 480px at 85% -10%, rgba(109,93,252,.14), transparent 60%),
+                     radial-gradient(700px 420px at -10% 25%, rgba(56,200,245,.09), transparent 55%);
+    background-attachment:fixed;
+  }
+  .hidden { display:none !important; }
+  a { color:var(--ac2); text-decoration:none; }
+
+  /* ---------- レイアウト ---------- */
+  .app { display:flex; min-height:100vh; }
+  .side {
+    width:216px; flex-shrink:0; padding:22px 14px; position:sticky; top:0; height:100vh;
+    display:flex; flex-direction:column; gap:4px; border-right:1px solid var(--line);
+    background:rgba(10,13,21,.6); backdrop-filter:blur(8px);
+  }
+  .brand { display:flex; align-items:center; gap:10px; padding:4px 10px 18px; }
+  .brand .logo {
+    width:34px; height:34px; border-radius:10px; background:var(--grad); display:grid; place-items:center;
+    font-size:17px; box-shadow:0 4px 14px rgba(109,93,252,.45);
+  }
+  .brand b { font-size:16px; letter-spacing:.4px; }
+  .brand small { display:block; color:var(--faint); font-size:10.5px; font-weight:400; }
+  .nav {
+    display:flex; align-items:center; gap:10px; padding:11px 12px; border-radius:11px; cursor:pointer;
+    color:var(--sub); font-size:13.5px; font-weight:600; transition:.15s; border:1px solid transparent;
+  }
+  .nav:hover { color:var(--tx); background:rgba(148,163,255,.06); }
+  .nav.sel { color:var(--tx); background:rgba(109,93,252,.14); border-color:rgba(109,93,252,.35); }
+  .nav .ico { font-size:16px; width:20px; text-align:center; }
+  .sidefoot { margin-top:auto; padding:10px 12px; color:var(--faint); font-size:11px; }
+
+  .main { flex:1; min-width:0; }
+  .top {
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:14px 22px;
+    border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20;
+    background:rgba(7,9,15,.75); backdrop-filter:blur(10px);
+  }
+  .content { max-width:820px; margin:0 auto; padding:22px 18px 90px; }
+
+  /* ---------- 共通部品 ---------- */
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:18px; margin-bottom:14px; }
+  .pill { display:inline-flex; align-items:center; gap:7px; padding:7px 13px; border-radius:20px; font-size:12.5px; background:var(--panel2); border:1px solid var(--line); }
+  .led { width:8px; height:8px; border-radius:50%; background:var(--sub); flex-shrink:0; }
   .led.on { background:var(--ok); box-shadow:0 0 8px var(--ok); }
   .led.off { background:var(--ng); }
   .led.busy { background:var(--warn); animation:blink 1s infinite; }
   @keyframes blink { 50% { opacity:.3; } }
-  button { border:none; border-radius:10px; padding:11px 18px; font-size:14px; font-weight:600; cursor:pointer; color:#fff; background:var(--card2); transition:.15s; }
-  button:hover { filter:brightness(1.15); }
-  button:disabled { opacity:.45; cursor:not-allowed; }
-  .btn-main { background:linear-gradient(135deg,var(--ac),#8e7cf3); font-size:17px; padding:15px 22px; width:100%; border-radius:12px; }
-  .btn-stop { background:#3d2b2b; color:var(--ng); }
-  .btn-start { background:#1f3d33; color:var(--ok); }
-  label.lbl { display:block; font-size:13px; color:var(--sub); margin:14px 0 6px; }
-  textarea { width:100%; min-height:110px; background:var(--card2); color:var(--tx); border:1px solid #333850; border-radius:10px; padding:12px; font-size:14px; resize:vertical; }
-  textarea:focus { outline:2px solid var(--ac); }
-  .tabs { display:flex; gap:8px; }
-  .tab { flex:1; text-align:center; padding:12px; border-radius:10px; background:var(--card2); cursor:pointer; font-size:14px; border:2px solid transparent; }
-  .tab.sel { border-color:var(--ac); background:#262a45; }
-  .seg { display:flex; gap:8px; }
-  .seg button { flex:1; }
-  .seg button.sel { background:var(--ac); }
+  button {
+    border:none; border-radius:11px; padding:10px 16px; font-size:13.5px; font-weight:600; cursor:pointer;
+    color:var(--tx); background:var(--panel2); border:1px solid var(--line); transition:.15s;
+  }
+  button:hover { border-color:var(--line2); filter:brightness(1.12); }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  .btn-main {
+    background:var(--grad); border:none; font-size:16px; padding:15px 22px; width:100%; border-radius:13px;
+    color:#fff; box-shadow:0 6px 20px rgba(109,93,252,.35); letter-spacing:.3px;
+  }
+  .btn-main:hover { filter:brightness(1.08); transform:translateY(-1px); }
+  .btn-ghost { background:transparent; }
+  .btn-danger { background:rgba(255,107,129,.1); border-color:rgba(255,107,129,.3); color:var(--ng); }
+  .btn-start { background:rgba(47,209,147,.12); border-color:rgba(47,209,147,.35); color:var(--ok); padding:8px 14px; font-size:12.5px; }
+  .btn-stop { background:rgba(255,107,129,.1); border-color:rgba(255,107,129,.3); color:var(--ng); padding:8px 14px; font-size:12.5px; }
+  h2.pagetitle { font-size:19px; margin-bottom:4px; letter-spacing:.3px; }
+  .pagedesc { color:var(--sub); font-size:12.5px; margin-bottom:16px; }
+  label.lbl { display:block; font-size:12.5px; color:var(--sub); margin:14px 0 6px; font-weight:600; }
+  textarea, input.txt, select.txt {
+    width:100%; background:var(--field); color:var(--tx); border:1px solid var(--line);
+    border-radius:11px; padding:12px; font-size:14px;
+  }
+  textarea { min-height:120px; resize:vertical; line-height:1.7; }
+  textarea:focus, input.txt:focus, select.txt:focus, input:focus { outline:2px solid rgba(109,93,252,.55); border-color:transparent; }
   input[type=range] { width:100%; accent-color:var(--ac); }
-  .drop { border:2px dashed #3a3f58; border-radius:10px; padding:18px; text-align:center; color:var(--sub); cursor:pointer; font-size:13px; }
-  .drop img { max-height:120px; border-radius:8px; margin-top:8px; }
-  .status-big { text-align:center; padding:10px 0; }
-  .spinner { width:34px; height:34px; border:4px solid #333850; border-top-color:var(--ac2); border-radius:50%; margin:0 auto 10px; animation:spin 1s linear infinite; }
+  .hint { font-size:11.5px; color:var(--sub); line-height:1.7; margin-top:6px; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+
+  /* トグルスイッチ */
+  .sw { display:flex; align-items:center; gap:10px; cursor:pointer; font-size:13px; user-select:none; padding:6px 0; }
+  .sw input { display:none; }
+  .sw .tr { width:38px; height:21px; border-radius:12px; background:#2a3148; position:relative; transition:.2s; flex-shrink:0; }
+  .sw .tr::after { content:""; position:absolute; top:2.5px; left:3px; width:16px; height:16px; border-radius:50%; background:#aab1c9; transition:.2s; }
+  .sw input:checked + .tr { background:var(--ac); }
+  .sw input:checked + .tr::after { left:19px; background:#fff; }
+  .sw small { color:var(--faint); font-size:11px; }
+
+  /* モード選択 */
+  .modes { display:flex; gap:8px; overflow-x:auto; padding-bottom:2px; }
+  .tab {
+    flex:1; min-width:100px; text-align:center; padding:12px 8px; border-radius:12px; cursor:pointer;
+    background:var(--panel); border:1px solid var(--line); font-size:12.5px; font-weight:600; color:var(--sub); transition:.15s;
+  }
+  .tab .tico { display:block; font-size:19px; margin-bottom:4px; }
+  .tab:hover { color:var(--tx); border-color:var(--line2); }
+  .tab.sel { color:var(--tx); border-color:rgba(109,93,252,.55); background:linear-gradient(180deg,rgba(109,93,252,.16),rgba(109,93,252,.05)); }
+
+  /* セグメント */
+  .seg { display:flex; gap:6px; background:var(--field); padding:4px; border-radius:11px; border:1px solid var(--line); }
+  .seg button { flex:1; background:transparent; border:none; padding:9px 6px; font-size:12.5px; color:var(--sub); }
+  .seg button.sel { background:var(--ac); color:#fff; border-radius:8px; }
+
+  /* ドロップゾーン */
+  .drop {
+    border:1.5px dashed var(--line2); border-radius:12px; padding:18px 14px; text-align:center;
+    color:var(--sub); cursor:pointer; font-size:12.5px; transition:.15s; background:rgba(148,163,255,.02);
+  }
+  .drop:hover { border-color:var(--ac); color:var(--tx); }
+  .drop img { max-height:110px; border-radius:8px; margin-top:8px; }
+  .clearbtn { background:transparent; border:none; color:var(--ng); font-size:11.5px; padding:5px 8px; margin-top:2px; }
+
+  /* エレメントチップ */
+  .chips { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .chip {
+    display:flex; align-items:center; gap:7px; padding:4px 12px 4px 4px; border-radius:20px; cursor:pointer;
+    border:1.5px solid var(--line); background:var(--panel2); font-size:12.5px; transition:.15s;
+  }
+  .chip img { width:28px; height:28px; object-fit:cover; border-radius:50%; }
+  .chip:hover { border-color:var(--line2); }
+  .chip.on { border-color:var(--ac2); background:rgba(56,200,245,.1); }
+
+  /* details */
+  details { border:1px solid var(--line); border-radius:12px; padding:0 14px; margin-top:10px; background:var(--panel2); }
+  details summary { cursor:pointer; font-size:13px; font-weight:600; color:var(--ac2); padding:12px 0; list-style:none; }
+  details summary::before { content:"▸ "; transition:.15s; }
+  details[open] summary::before { content:"▾ "; }
+  details > :last-child { margin-bottom:14px; }
+
+  /* 進捗 */
+  .progwrap { text-align:center; padding:6px 0; }
+  .spinner { width:32px; height:32px; border:3.5px solid #2a3148; border-top-color:var(--ac2); border-radius:50%; margin:0 auto 12px; animation:spin 1s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
-  .msg { font-size:15px; }
-  .err { color:var(--ng); font-size:14px; white-space:pre-wrap; }
-  .cost { font-size:12px; color:var(--sub); text-align:center; margin-top:8px; }
-  video { width:100%; border-radius:10px; margin-top:8px; background:#000; }
-  .gal { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-  .gal video { margin:0; }
-  .hint { font-size:12px; color:var(--sub); line-height:1.7; margin-top:8px; }
-  .keybox input { width:100%; padding:12px; border-radius:10px; border:1px solid #333850; background:var(--card2); color:var(--tx); font-size:14px; }
-  input.txt, select.txt { width:100%; padding:10px 12px; border-radius:10px; border:1px solid #333850; background:var(--card2); color:var(--tx); font-size:14px; }
-  input.txt:focus, select.txt:focus { outline:2px solid var(--ac); }
-  a { color:var(--ac2); }
-  .hidden { display:none !important; }
-  .elapsed { font-size:12px; color:var(--sub); margin-top:4px; }
-  .clearbtn { background:#3d2b2b; color:var(--ng); font-size:12px; padding:6px 12px; margin-top:6px; }
+  .pbar { height:8px; border-radius:6px; background:#222941; overflow:hidden; margin:12px auto 6px; max-width:420px; }
+  .pbar > div { height:100%; border-radius:6px; background:var(--grad); width:0%; transition:width .6s; }
+  .pbar.wave > div { width:40% !important; animation:wave 1.6s ease-in-out infinite; }
+  @keyframes wave { 0% { margin-left:-40%; } 100% { margin-left:100%; } }
+  .msg { font-size:14.5px; }
+  .elapsed { font-size:11.5px; color:var(--sub); margin-top:6px; }
+  .err { color:var(--ng); font-size:13.5px; white-space:pre-wrap; line-height:1.7; margin-top:8px; }
+  video { width:100%; border-radius:11px; background:#000; }
+
+  /* エレメント管理ページ */
+  .egrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; }
+  .ecard { background:var(--panel); border:1px solid var(--line); border-radius:13px; padding:12px; text-align:center; transition:.15s; }
+  .ecard:hover { border-color:var(--line2); transform:translateY(-2px); }
+  .ecard img { width:100%; aspect-ratio:1; object-fit:cover; border-radius:9px; cursor:pointer; }
+  .ecard .ename { font-weight:700; font-size:13.5px; margin-top:8px; }
+  .ecard .etype { display:inline-block; font-size:10.5px; color:var(--ac2); border:1px solid rgba(56,200,245,.35); padding:1px 8px; border-radius:10px; margin-top:4px; }
+  .ecard .ememo { font-size:11px; color:var(--sub); margin-top:4px; min-height:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ecard .row { justify-content:center; margin-top:8px; gap:6px; }
+  .ecard .row button { font-size:11px; padding:5px 10px; }
+  .newcard { border-style:dashed; display:grid; place-items:center; min-height:210px; cursor:pointer; color:var(--sub); font-size:13px; }
+  .newcard:hover { color:var(--tx); border-color:var(--ac); }
+
+  /* 作品ページ */
+  .hcard { display:flex; gap:14px; background:var(--panel); border:1px solid var(--line); border-radius:13px; padding:12px; margin-bottom:12px; flex-wrap:wrap; }
+  .hcard video { width:230px; flex-shrink:0; align-self:flex-start; }
+  .hmeta { font-size:11.5px; color:var(--sub); display:flex; gap:6px; flex-wrap:wrap; }
+  .hmeta span { background:var(--panel2); padding:2px 9px; border-radius:9px; border:1px solid var(--line); }
+  .hprompt { font-size:12.5px; line-height:1.65; margin:8px 0 4px; max-height:63px; overflow:hidden; color:#c9cede; }
+  .gal { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
+
+  .toast {
+    position:fixed; left:50%; bottom:84px; transform:translateX(-50%) translateY(20px); z-index:99;
+    background:#1d2436; border:1px solid var(--line2); padding:11px 20px; border-radius:12px; font-size:13px;
+    opacity:0; pointer-events:none; transition:.25s; box-shadow:var(--shadow);
+  }
+  .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+  .bottomnav { display:none; }
+
+  @media (max-width:880px) {
+    .side { display:none; }
+    .top { padding:10px 12px; }
+    .content { padding:16px 12px 96px; }
+    .hcard video { width:100%; }
+    .bottomnav {
+      display:flex; position:fixed; bottom:0; left:0; right:0; z-index:50;
+      background:rgba(10,13,21,.92); backdrop-filter:blur(12px); border-top:1px solid var(--line);
+    }
+    .bottomnav .nav { flex:1; flex-direction:column; gap:3px; border-radius:0; font-size:10.5px; padding:9px 4px; text-align:center; border:none; }
+    .bottomnav .nav.sel { background:none; color:var(--ac2); }
+    .bottomnav .ico { font-size:19px; width:auto; }
+    .modes .tab { min-width:86px; }
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>🎬 H3かんたん動画メーカー <span class="dot">●</span></h1>
-  <div class="sub">文章や画像から、音声つき動画をワンクリック生成（MiniMax H3 / RunPod）<span id="verTag" style="margin-left:8px;color:#555"></span></div>
+<div class="app">
 
-  <!-- 初回セットアップ -->
-  <div class="card hidden" id="setup">
-    <b>はじめに1回だけ：RunPodのAPIキーを設定します</b>
-    <div class="hint">
-      1. <a href="https://console.runpod.io/user/settings" target="_blank">RunPodの設定ページ</a>を開く<br>
-      2. 「API keys」の欄で <b>Create API key</b> を押す（名前は何でもOK・権限は All / Read &amp; Write）<br>
-      3. 表示された長い文字列をコピーして、下に貼り付けて保存
+  <!-- サイドバー -->
+  <aside class="side">
+    <div class="brand">
+      <div class="logo">🎬</div>
+      <div><b>H3 Studio</b><small>かんたん動画メーカー</small></div>
     </div>
-    <div class="keybox" style="margin-top:10px"><input id="apikey" type="password" placeholder="ここにAPIキーを貼り付け"></div>
-    <div style="margin-top:10px"><button class="btn-main" onclick="saveKey()">保存してはじめる</button></div>
-    <div class="err" id="keyerr"></div>
-  </div>
+    <div class="nav sel" id="nav_create" onclick="go('create')"><span class="ico">✨</span>作成</div>
+    <div class="nav" id="nav_elements" onclick="go('elements')"><span class="ico">📦</span>エレメント</div>
+    <div class="nav" id="nav_library" onclick="go('library')"><span class="ico">🎞️</span>作品</div>
+    <div class="nav" id="nav_settings" onclick="go('settings')"><span class="ico">⚙️</span>設定</div>
+    <div class="sidefoot" id="verTag"></div>
+  </aside>
 
-  <!-- サーバー状態 -->
-  <div class="card hidden" id="serverCard">
-    <div class="row" style="justify-content:space-between">
+  <div class="main">
+    <!-- トップバー -->
+    <header class="top">
       <span class="pill"><span class="led" id="podLed"></span><span id="podText">確認中…</span></span>
-      <span class="pill" id="balancePill" style="display:none">💰 <span id="balanceText"></span></span>
-      <span class="row">
-        <button class="btn-start" id="btnStart" onclick="podStart()">サーバー起動</button>
-        <button class="btn-stop" id="btnStop" onclick="podStop()">サーバー停止</button>
-      </span>
-    </div>
-    <div class="hint">起動中は約500円/時（H100）かかります。<b>使い終わったら必ず停止！</b>（自動停止ONなら安心）。H100が満席のときは自動でH200（約690円/時）に切り替わることがあります。</div>
-  </div>
+      <button class="btn-start" id="btnStart" onclick="podStart()">▶ 起動</button>
+      <button class="btn-stop" id="btnStop" onclick="podStop()">■ 停止</button>
+      <span class="pill" id="balancePill" style="display:none;margin-left:auto">💰 <span id="balanceText"></span></span>
+    </header>
 
-  <!-- 生成フォーム -->
-  <div class="card hidden" id="genCard">
-    <div style="margin-bottom:12px">
-      <div style="display:flex;gap:8px">
-        <button style="flex:1;background:linear-gradient(135deg,#0d8a5f,#10a37f);font-size:14px" onclick="window.open('https://chatgpt.com/g/g-6a7c6fcb9f8c8191848a4e376a1b6762-h3huroji-huronhutozhi-ren','_blank')">🤖 ① GPTsでプロンプト作成</button>
-        <button style="flex:1;background:linear-gradient(135deg,#0e6e64,var(--ac2));font-size:14px" onclick="pasteFromGPTs()">📋 ② コピーした成果物を貼り付け</button>
-      </div>
-      <div class="hint" id="pasteResult"></div>
-      <div id="pasteFallback" class="hidden" style="margin-top:8px">
-        <textarea id="pasteBox" style="min-height:90px" placeholder="ここにGPTsの出力を貼り付けて「適用」を押してください"></textarea>
-        <button style="margin-top:6px" onclick="applyGPTs($('pasteBox').value); $('pasteFallback').classList.add('hidden')">適用</button>
-      </div>
-    </div>
-    <div class="tabs">
-      <div class="tab sel" id="tab_t2v" onclick="setMode('t2v')">📝 文章から</div>
-      <div class="tab" id="tab_i2v" onclick="setMode('i2v')">🖼️ 画像を動かす</div>
-      <div class="tab" id="tab_flf2v" onclick="setMode('flf2v')">🎬 始点→終点</div>
-      <div class="tab" id="tab_r2v" onclick="setMode('r2v')">👤 人物固定</div>
-      <div class="tab" id="tab_edit" onclick="setMode('edit')">✂️ 部分編集</div>
-    </div>
+    <div class="content">
 
-    <div id="elemArea">
-      <label class="lbl">📦 エレメント（登録した人物・場所をクリックで今回の動画に使う）</label>
-      <div id="elemChips" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"></div>
-      <div class="hint" id="elemHint"></div>
-      <details id="elemMgr" style="margin-top:6px">
-        <summary style="cursor:pointer;font-size:13px;color:var(--ac2)">➕ エレメントの登録・削除（クリックで開く）</summary>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">
-          <input type="text" id="elemName" placeholder="名前（例：ユキ）" style="width:130px">
-          <select id="elemType" style="width:110px">
+    <!-- ========== 作成 ========== -->
+    <section id="view-create">
+
+      <div class="modes">
+        <div class="tab sel" id="tab_t2v" onclick="setMode('t2v')"><span class="tico">📝</span>文章から</div>
+        <div class="tab" id="tab_i2v" onclick="setMode('i2v')"><span class="tico">🖼️</span>画像を動かす</div>
+        <div class="tab" id="tab_flf2v" onclick="setMode('flf2v')"><span class="tico">🎬</span>始点→終点</div>
+        <div class="tab" id="tab_r2v" onclick="setMode('r2v')"><span class="tico">👤</span>人物固定</div>
+        <div class="tab" id="tab_edit" onclick="setMode('edit')"><span class="tico">✂️</span>部分編集</div>
+      </div>
+
+      <!-- モード別の素材入力 -->
+      <div class="card hidden" id="imgArea" style="margin-top:14px">
+        <label class="lbl" style="margin-top:0">動かしたい画像（JPG / PNG / WebP）</label>
+        <div class="drop" id="drop" onclick="document.getElementById('file').click()">
+          クリックして画像を選択（ドラッグ＆ドロップ可）
+          <div id="preview"></div>
+        </div>
+        <button class="clearbtn hidden" id="clrImg" onclick="clearZone('img')">✕ 取り消す</button>
+        <input type="file" id="file" accept=".jpg,.jpeg,.png,.webp,.bmp" class="hidden">
+      </div>
+
+      <div class="card hidden" id="flfArea" style="margin-top:14px">
+        <div class="row" style="align-items:stretch">
+          <div style="flex:1;min-width:180px">
+            <label class="lbl" style="margin-top:0">最初の画像</label>
+            <div class="drop" onclick="document.getElementById('flfFirst').click()">クリックして選択<div id="flfFirstPrev"></div></div>
+            <button class="clearbtn hidden" id="clrFlfFirst" onclick="clearZone('flfFirst')">✕ 取り消す</button>
+          </div>
+          <div style="align-self:center;font-size:20px;color:var(--sub)">→</div>
+          <div style="flex:1;min-width:180px">
+            <label class="lbl" style="margin-top:0">最後の画像</label>
+            <div class="drop" onclick="document.getElementById('flfLast').click()">クリックして選択<div id="flfLastPrev"></div></div>
+            <button class="clearbtn hidden" id="clrFlfLast" onclick="clearZone('flfLast')">✕ 取り消す</button>
+          </div>
+        </div>
+        <input type="file" id="flfFirst" accept=".jpg,.jpeg,.png,.webp,.bmp" class="hidden">
+        <input type="file" id="flfLast" accept=".jpg,.jpeg,.png,.webp,.bmp" class="hidden">
+        <div class="hint">2枚の画像の間を滑らかに繋ぎます（昼→夜、変身前→変身後 など）。</div>
+      </div>
+
+      <div class="card hidden" id="refArea" style="margin-top:14px">
+        <label class="lbl" style="margin-top:0">固定したい人物の参照画像（1〜4枚）</label>
+        <div class="drop" id="refDrop" onclick="document.getElementById('refFiles').click()">
+          クリックして画像を選択（複数OK・正面の顔がはっきり写っているほど似ます）
+          <div id="refPreview" style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap"></div>
+        </div>
+        <button class="clearbtn hidden" id="clrRef" onclick="clearZone('ref')">✕ 全部取り消す</button>
+        <input type="file" id="refFiles" accept=".jpg,.jpeg,.png,.webp,.bmp" multiple class="hidden">
+        <div class="hint">画像の下の「@名前」でプロンプトから指定できます。例：<b>@ユキと@レンがカフェで話す</b>（2人以上OK）</div>
+      </div>
+
+      <div class="card hidden" id="editArea" style="margin-top:14px">
+        <label class="lbl" style="margin-top:0">編集する元動画（MP4・WebM・MKV／60MBまで）</label>
+        <div class="drop" onclick="document.getElementById('refVideo').click()">
+          クリックして動画を選択（動き・カメラ・背景はそのまま維持されます）
+          <div id="refVideoPrev" style="font-size:12px;color:var(--ac2);margin-top:6px"></div>
+        </div>
+        <button class="clearbtn hidden" id="clrVideo" onclick="clearZone('video')">✕ 取り消す</button>
+        <input type="file" id="refVideo" accept=".mp4,.webm,.mkv,video/mp4" class="hidden">
+
+        <label class="sw" style="margin-top:10px">
+          <input type="checkbox" id="keepAudio" checked><span class="tr"></span>
+          <span>🔊 元動画の音声をそのまま使う<br><small>声・言葉が完全に同じになります（おすすめ）</small></span>
+        </label>
+
+        <label class="lbl">変更後の見た目の参照画像（任意・0〜4枚）</label>
+        <div class="drop" onclick="document.getElementById('editRefFiles').click()">
+          クリックして画像を選択（例：差し替えたい顔の画像。なしでも文章だけで変更可）
+          <div id="editRefPreview" style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap"></div>
+        </div>
+        <button class="clearbtn hidden" id="clrEditRef" onclick="clearZone('editRef')">✕ 全部取り消す</button>
+        <input type="file" id="editRefFiles" accept=".jpg,.jpeg,.png,.webp,.bmp" multiple class="hidden">
+        <div class="hint">顔の差し替えは<b>正面の顔が大きく写った高画質画像</b>ほど似ます。プロンプトでは <b>@元動画</b> と <b>@名前</b> で指定できます。</div>
+        <div class="hint" style="color:var(--warn)">⚠️ 実在の人物の動画を本人の同意なく差し替えることは禁止です。</div>
+      </div>
+
+      <!-- エレメント -->
+      <div class="card" style="margin-top:14px">
+        <div class="row" style="justify-content:space-between">
+          <label class="lbl" style="margin:0">📦 エレメント</label>
+          <a href="javascript:void(0)" onclick="go('elements')" style="font-size:12px">登録・編集 →</a>
+        </div>
+        <div class="chips" id="elemChips" style="margin-top:10px"></div>
+        <div class="hint" id="elemHint"></div>
+      </div>
+
+      <!-- プロンプト -->
+      <div class="card">
+        <div class="row" style="justify-content:space-between">
+          <label class="lbl" style="margin:0">どんな動画にしたい？</label>
+          <span class="row" style="gap:6px">
+            <button class="btn-ghost" style="font-size:12px;padding:6px 10px" onclick="window.open('https://chatgpt.com/g/g-6a7c6fcb9f8c8191848a4e376a1b6762-h3huroji-huronhutozhi-ren','_blank')">🤖 GPTsで作る</button>
+            <button class="btn-ghost" style="font-size:12px;padding:6px 10px" onclick="pasteFromGPTs()">📋 貼り付け</button>
+          </span>
+        </div>
+        <div class="hint" id="pasteResult" style="margin:4px 0 8px"></div>
+        <div id="pasteFallback" class="hidden" style="margin-bottom:8px">
+          <textarea id="pasteBox" style="min-height:80px" placeholder="ここにGPTsの出力を貼り付けてください"></textarea>
+          <button style="margin-top:6px" onclick="applyGPTs($('pasteBox').value); $('pasteFallback').classList.add('hidden')">適用</button>
+        </div>
+        <textarea id="prompt" oninput="updatePromptHint()" style="margin-top:8px"></textarea>
+        <div class="hint" id="promptHint"></div>
+      </div>
+
+      <!-- 設定 -->
+      <div class="card">
+        <div class="row" style="align-items:flex-end">
+          <div style="flex:1.2;min-width:200px">
+            <label class="lbl" style="margin-top:0">長さ：<b id="secLabel" style="color:var(--tx)">5秒</b></label>
+            <input type="range" id="seconds" min="4" max="15" value="5" oninput="updateSec()">
+          </div>
+          <div style="flex:1;min-width:200px">
+            <label class="lbl" style="margin-top:0">画面の形</label>
+            <div class="seg" id="aspectSeg">
+              <button class="sel" data-a="16:9" onclick="setAspect('16:9')">🖥️ 横長</button>
+              <button data-a="9:16" onclick="setAspect('9:16')">📱 縦長</button>
+              <button data-a="1:1" onclick="setAspect('1:1')">⬜ 正方形</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:8px;gap:20px">
+          <label class="sw"><input type="checkbox" id="fastMode"><span class="tr"></span><span>⚡ 高速モード<br><small>1.5〜2倍速・費用も削減</small></span></label>
+          <label class="sw"><input type="checkbox" id="autoStop" checked><span class="tr"></span><span>完成後にサーバー自動停止<br><small>課金ストップ（推奨）</small></span></label>
+        </div>
+
+        <details>
+          <summary>🎙️ セリフ・音の設定</summary>
+          <label class="lbl">セリフ（口の動きも自動同期）</label>
+          <textarea id="dialogue" style="min-height:56px" placeholder="例：いらっしゃいませ！本日のおすすめはこちらです。"></textarea>
+          <label class="lbl">声の感じ</label>
+          <input class="txt" id="voice" placeholder="例：明るく元気な若い女性の声">
+          <label class="lbl">BGM</label>
+          <input class="txt" id="bgm" placeholder="例：切ないピアノバラード">
+          <label class="lbl">効果音・環境音</label>
+          <input class="txt" id="se" placeholder="例：雨の音、遠くの雷鳴">
+          <label class="lbl">音のバランス</label>
+          <select id="mix" class="txt">
+            <option value="auto">おまかせ</option>
+            <option value="voice_first">セリフ優先</option>
+            <option value="no_speech">🔇 しゃべらせない</option>
+            <option value="silent">🔇 完全に静かに</option>
+            <option value="bgm_low">BGM控えめ</option>
+            <option value="no_bgm">BGMなし</option>
+          </select>
+          <div class="hint">勝手にナレーションが入るときは「🔇 しゃべらせない」を。</div>
+        </details>
+
+        <details>
+          <summary>⚙️ こだわり設定</summary>
+          <label class="lbl">画質（上げるほど時間・費用が増加）</label>
+          <select id="qualityMp" class="txt">
+            <option value="0.2">お試し（最速）</option>
+            <option value="0.4" selected>標準（5秒 約5分）</option>
+            <option value="0.6">高画質（5秒 約8分）</option>
+            <option value="1.0">最高 768p（5秒 約13分）</option>
+          </select>
+          <label class="lbl">仕上げの丁寧さ</label>
+          <select id="steps" class="txt">
+            <option value="15">はやい（15）</option>
+            <option value="20" selected>標準（20）</option>
+            <option value="25">ていねい（25）</option>
+          </select>
+          <label class="lbl">シード値（空欄＝ランダム。同じ数字で似た結果を再現）</label>
+          <input class="txt" id="seed" placeholder="空欄でOK">
+          <label class="sw" style="margin-top:10px"><input type="checkbox" id="noText" checked><span class="tr"></span><span>画面に文字・ロゴを出さない（推奨）</span></label>
+        </details>
+      </div>
+
+      <button class="btn-main" id="btnGen" onclick="generate()">🚀 動画を生成する</button>
+      <div class="hint" id="costText" style="text-align:center"></div>
+
+      <!-- 進捗・結果・エラー -->
+      <div class="card hidden" id="progCard" style="margin-top:14px">
+        <div class="progwrap">
+          <div class="spinner"></div>
+          <div class="msg" id="progMsg">準備中…</div>
+          <div class="pbar wave" id="pbar"><div id="pbarFill"></div></div>
+          <div class="elapsed" id="elapsed"></div>
+        </div>
+      </div>
+
+      <div class="card hidden" id="doneCard" style="margin-top:14px">
+        <b style="color:var(--ok)">✅ 完成しました</b>
+        <video id="result" controls autoplay loop style="margin-top:10px"></video>
+        <div class="hint" id="seedInfo"></div>
+        <div class="hint">outputsフォルダにも保存済み。右クリック→保存もできます。</div>
+      </div>
+
+      <div class="card hidden" id="errCard" style="margin-top:14px;border-color:rgba(255,107,129,.35)">
+        <div class="row" style="justify-content:space-between">
+          <b style="color:var(--ng)">⚠️ エラー</b>
+          <button style="padding:5px 12px;font-size:12px" onclick="clearError()">✕ 閉じる</button>
+        </div>
+        <div class="err" id="errMsg"></div>
+        <div class="hint">GPU満席の場合は時間をおいて再試行。繰り返す場合はこの画面を管理者へ。</div>
+      </div>
+    </section>
+
+    <!-- ========== エレメント ========== -->
+    <section id="view-elements" class="hidden">
+      <h2 class="pagetitle">📦 エレメント</h2>
+      <div class="pagedesc">人物・場所・物・スタイルを登録して使い回し。生成時にクリックで選び、プロンプトで <b>@名前</b> と書くだけ。</div>
+
+      <div class="card hidden" id="elemFormCard">
+        <b id="elemFormTitle">新しいエレメントを登録</b>
+        <div class="row" style="margin-top:12px">
+          <input type="text" class="txt" id="elemName" placeholder="名前（例：ユキ）" style="flex:1;min-width:120px">
+          <select id="elemType" class="txt" style="width:130px">
             <option value="人物">👤 人物</option>
             <option value="場所">📍 場所</option>
             <option value="物">🧥 物・衣装</option>
             <option value="スタイル">🎨 スタイル</option>
           </select>
-          <input type="text" id="elemMemo" placeholder="補足メモ（例：20代女性・黒髪ロング）任意" style="flex:1;min-width:160px">
         </div>
-        <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
-          <button style="font-size:13px;padding:8px 12px" onclick="document.getElementById('elemFiles').click()">🖼️ 画像を選ぶ（1〜3枚）</button>
-          <span id="elemFilesLabel" class="hint" style="margin:0"></span>
-          <button style="font-size:13px;padding:8px 14px;background:linear-gradient(135deg,#0e6e64,var(--ac2))" onclick="registerElement()">💾 この内容で登録</button>
+        <input type="text" class="txt" id="elemMemo" placeholder="補足メモ（例：20代女性・黒髪ロング）任意" style="margin-top:8px">
+        <div class="row" style="margin-top:10px">
+          <button onclick="document.getElementById('elemFiles').click()">🖼️ 画像を選ぶ（1〜3枚）</button>
+          <span class="hint" id="elemFilesLabel" style="margin:0"></span>
         </div>
         <input type="file" id="elemFiles" accept=".jpg,.jpeg,.png,.webp,.bmp" multiple class="hidden">
-        <div class="hint">👤人物は「正面の顔が大きくはっきり写った画像」推奨（正面＋横顔の2枚だとさらに◎）。登録は消すまでずっと使い回せます（保存先はこのPCの中。PCごとに登録が必要）。</div>
-        <div id="elemList" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px"></div>
-      </details>
-    </div>
-
-    <div id="flfArea" class="hidden">
-      <label class="lbl">最初の画像（動画のスタート地点／JPG・PNG・WebP）</label>
-      <div class="drop" onclick="document.getElementById('flfFirst').click()">クリックして画像を選択<div id="flfFirstPrev"></div></div>
-      <button class="clearbtn hidden" id="clrFlfFirst" onclick="clearZone('flfFirst')">✕ 取り消す</button>
-      <input type="file" id="flfFirst" accept=".jpg,.jpeg,.png,.webp,.bmp" class="hidden">
-      <label class="lbl">最後の画像（動画のゴール地点／JPG・PNG・WebP）</label>
-      <div class="drop" onclick="document.getElementById('flfLast').click()">クリックして画像を選択<div id="flfLastPrev"></div></div>
-      <button class="clearbtn hidden" id="clrFlfLast" onclick="clearZone('flfLast')">✕ 取り消す</button>
-      <input type="file" id="flfLast" accept=".jpg,.jpeg,.png,.webp,.bmp" class="hidden">
-      <div class="hint">2枚の画像の間を滑らかに繋ぐ動画を作ります（変身前→変身後、昼→夜、商品の角度A→角度B など）。プロンプトには「どう繋がってほしいか」を書くと効きます。</div>
-    </div>
-
-    <div id="imgArea" class="hidden">
-      <label class="lbl">動かしたい画像（対応形式: JPG / PNG / WebP）</label>
-      <div class="drop" id="drop" onclick="document.getElementById('file').click()">
-        クリックして画像を選択（またはドラッグ＆ドロップ）
-        <div id="preview"></div>
+        <div class="hint">👤人物は正面の顔が大きくはっきり写った画像を（正面＋横顔の2枚なら◎）。保存先はこのPC内。</div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn-main" style="flex:1;font-size:14px;padding:12px" id="btnElemSave" onclick="registerElement()">💾 保存</button>
+          <button onclick="closeElemForm()">キャンセル</button>
+        </div>
       </div>
-      <button class="clearbtn hidden" id="clrImg" onclick="clearZone('img')">✕ 画像の選択を取り消す</button>
-      <input type="file" id="file" accept=".jpg,.jpeg,.png,.webp,.bmp" class="hidden">
-    </div>
 
-    <div id="refArea" class="hidden">
-      <label class="lbl">固定したい人物・キャラの参照画像（1〜4枚／JPG・PNG・WebP。顔がはっきり写っているものが◎）</label>
-      <div class="drop" id="refDrop" onclick="document.getElementById('refFiles').click()">
-        クリックして画像を選択（複数選択OK）
-        <div id="refPreview" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap"></div>
+      <div class="egrid" id="elemGrid"></div>
+    </section>
+
+    <!-- ========== 作品 ========== -->
+    <section id="view-library" class="hidden">
+      <h2 class="pagetitle">🎞️ 作品</h2>
+      <div class="pagedesc">📋 プロンプトをコピー／↩️ 設定をまるごと呼び出して再生成（シード値込み）。</div>
+      <div id="histList"></div>
+      <div class="gal" id="gallery"></div>
+    </section>
+
+    <!-- ========== 設定 ========== -->
+    <section id="view-settings" class="hidden">
+      <h2 class="pagetitle">⚙️ 設定</h2>
+      <div class="pagedesc"></div>
+
+      <div class="card" id="setup">
+        <b>RunPod APIキー</b>
+        <div class="hint">
+          <a href="https://console.runpod.io/user/settings" target="_blank">RunPodの設定ページ</a> →「API keys」→ <b>Create API key</b>（権限 All）→ 下に貼り付け
+        </div>
+        <div class="row" style="margin-top:10px">
+          <input id="apikey" type="password" class="txt" placeholder="APIキーを貼り付け" style="flex:1;min-width:200px">
+          <button onclick="saveKey()">保存</button>
+        </div>
+        <div class="err" id="keyerr"></div>
       </div>
-      <button class="clearbtn hidden" id="clrRef" onclick="clearZone('ref')">✕ 画像を全部取り消す</button>
-      <input type="file" id="refFiles" accept=".jpg,.jpeg,.png,.webp,.bmp" multiple class="hidden">
-      <div class="hint">このモードは参照画像の人物の見た目（顔・髪型・服装）を保ったまま、文章の内容で自由に動かせます。※通常より生成に時間がかかります（最大3倍）</div>
-      <div class="hint">🏷️ <b>画像ごとに名前を付けて、プロンプトで「@名前」と書くとその画像を指定できます</b>（サムネイルの下の欄で名前を変更OK）。例：画像2枚に「ユキ」「レン」と名付けて→「@ユキと@レンがカフェで向かい合って話す」。人物ごとに画像を分ければ2人以上の動画も作れます。</div>
-    </div>
 
-    <div id="editArea" class="hidden">
-      <label class="lbl">🎞️ 編集する元動画（必須／対応形式: MP4・WebM・MKV、60MBまで）</label>
-      <div class="drop" onclick="document.getElementById('refVideo').click()">
-        クリックして動画を選択（動き・カメラ・背景はこの動画のまま維持されます）
-        <div id="refVideoPrev" style="font-size:12px;color:var(--ac2);margin-top:6px"></div>
+      <div class="card">
+        <b>💰 料金の目安</b>
+        <div class="hint" style="margin-top:8px">
+          サーバー起動中：約500円/時（H100。満席時は自動でH200 約690円/時）<br>
+          動画1本（5秒・標準画質）：約20円 ／ 部分編集・人物固定は約2〜3倍<br>
+          <b>使い終わったら必ずサーバー停止</b>（自動停止ONなら生成完了後に勝手に止まります）
+        </div>
       </div>
-      <button class="clearbtn hidden" id="clrVideo" onclick="clearZone('video')">✕ 動画の選択を取り消す</button>
-      <input type="file" id="refVideo" accept=".mp4,.webm,.mkv,video/mp4" class="hidden">
 
-      <label class="lbl" style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <input type="checkbox" id="keepAudio" checked> 🔊 元動画の音声をそのまま使う（声・言葉が完全に同じになる。おすすめ）
-      </label>
-      <div class="hint">ONにすると、完成した映像に元動画の音声をまるごと貼り直します（AIの作った音声は使いません）。しゃべる内容・声・音がすべて元動画と同一になります。</div>
-
-      <label class="lbl">変更後の見た目の参照画像（任意・0〜4枚／JPG・PNG・WebP。例：差し替えたい顔や服の画像）</label>
-      <div class="drop" onclick="document.getElementById('editRefFiles').click()">
-        クリックして画像を選択（画像なし＝下の指示文だけで変更もOK）
-        <div id="editRefPreview" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap"></div>
+      <div class="card">
+        <b>📚 リンク</b>
+        <div class="hint" style="margin-top:8px">
+          <a href="https://chatgpt.com/g/g-6a7c6fcb9f8c8191848a4e376a1b6762-h3huroji-huronhutozhi-ren" target="_blank">🤖 プロンプト作成GPTs</a>
+          <a href="/manual" target="_blank">📖 説明書</a>
+        </div>
       </div>
-      <button class="clearbtn hidden" id="clrEditRef" onclick="clearZone('editRef')">✕ 画像を全部取り消す</button>
-      <input type="file" id="editRefFiles" accept=".jpg,.jpeg,.png,.webp,.bmp" multiple class="hidden">
-      <div class="hint">📸 顔を差し替えるときのコツ：<b>正面の顔が大きくはっきり写った高画質の画像</b>を使ってください（顔が小さい・斜め・ぼやけていると似ません）。元動画で顔の向きが変わる場合は、正面＋横顔など複数枚入れると一致度が上がります。体型が元動画の人物と近いほど自然になります。</div>
-      <div class="hint">🏷️ <b>プロンプトでは「@元動画」（選んだ動画）と「@名前」（各画像）で指定できます</b>（サムネイルの下の欄で名前を変更OK）。例：「@元動画の人物の顔だけを@画像1の顔に置き換える」。「元動画」「参照画像」という普通の言葉で書いても自動で伝わるようにしてあります。</div>
+    </section>
 
-      <div class="hint">プロンプト欄に「何をどう変えるか」を書いてください（例：人物の顔だけを参照画像の女性に変える／服を赤いドレスに変える。それ以外は変えない）。※生成時間は通常の約3倍</div>
-      <div class="hint" style="color:var(--warn)">⚠️ 実在の人物（有名人・知人）の動画を本人の同意なく顔・姿を差し替えることは禁止です（ライセンス違反・法的リスク）。自分たちで作った動画や、同意のある素材だけに使ってください。</div>
-      <div class="hint">💡 元動画で人物が口を動かしていると、AIが口の動きに合わせて勝手に声を作ります。上の「🔊 元動画の音声をそのまま使う」をONにしておけば声は元動画と完全に同じになります。AIに新しい声で話させたいときだけOFFにして、「🎙️セリフ・音の設定」のセリフ欄に日本語で記入してください。</div>
-    </div>
-
-    <label class="lbl">どんな動画にしたい？（日本語OK。セリフ・音・カメラの動きも書ける）</label>
-    <textarea id="prompt" placeholder="例：実写のシネマティックな映像、夕暮れの光。桜並木を白い猫が歩いてくる。カメラはゆっくり猫に寄っていく。[3秒-] 猫が立ち止まり、花びらが舞う中で空を見上げる。BGMは穏やかなピアノ。" oninput="updatePromptHint()"></textarea>
-    <div class="hint" id="promptHint"></div>
-
-    <label class="lbl">長さ：<b id="secLabel">5秒</b>（長いほど時間とお金がかかる）</label>
-    <input type="range" id="seconds" min="4" max="15" value="5" oninput="updateSec()">
-
-    <label class="lbl">画面の形</label>
-    <div class="seg" id="aspectSeg">
-      <button class="sel" data-a="16:9" onclick="setAspect('16:9')">🖥️ 横長</button>
-      <button data-a="9:16" onclick="setAspect('9:16')">📱 縦長</button>
-      <button data-a="1:1" onclick="setAspect('1:1')">⬜ 正方形</button>
-    </div>
-
-    <details style="margin-top:16px">
-      <summary style="cursor:pointer;color:var(--ac2);font-size:14px;font-weight:600">🎙️ セリフ・音の設定（クリックで開く）</summary>
-
-      <label class="lbl">セリフ（しゃべらせたい言葉。口の動きも自動で同期＝リップシンク）</label>
-      <textarea id="dialogue" style="min-height:60px" placeholder="例：いらっしゃいませ！本日のおすすめはこちらです。"></textarea>
-
-      <label class="lbl">声の感じ</label>
-      <input class="txt" id="voice" placeholder="例：明るく元気な若い女性の声／低くて渋い男性の声">
-
-      <label class="lbl">BGM（音楽の指定）</label>
-      <input class="txt" id="bgm" placeholder="例：切ないピアノバラード／アップテンポなEDM／ジャズ">
-
-      <label class="lbl">効果音・環境音</label>
-      <input class="txt" id="se" placeholder="例：雨の音、遠くの雷鳴／街の雑踏／波の音">
-
-      <label class="lbl">音のバランス</label>
-      <select id="mix" class="txt">
-        <option value="auto">おまかせ</option>
-        <option value="voice_first">セリフ優先（BGM・効果音は控えめ）</option>
-        <option value="no_speech">🔇 しゃべらせない（BGM・環境音のみ）</option>
-        <option value="silent">🔇 完全に静かに（環境音のみ・BGMもなし）</option>
-        <option value="bgm_low">BGMをごく控えめに</option>
-        <option value="no_bgm">BGMなし（環境音とセリフのみ）</option>
-      </select>
-      <div class="hint">※ 勝手にナレーションが入る場合は「🔇 しゃべらせない」を選んでください。H3は数値での音量指定はできません。</div>
-    </details>
-
-    <details style="margin-top:10px">
-      <summary style="cursor:pointer;color:var(--ac2);font-size:14px;font-weight:600">⚙️ こだわり設定（クリックで開く）</summary>
-
-      <label class="lbl">画質（きれいなほど生成時間とお金が比例して増える）</label>
-      <select id="qualityMp" class="txt">
-        <option value="0.2">お試し（低画質・最速）</option>
-        <option value="0.4" selected>標準（832×464相当・5秒約5分）</option>
-        <option value="0.6">高画質（1024×576相当・5秒約8分）</option>
-        <option value="1.0">最高画質（1344×768相当・5秒約13分）</option>
-      </select>
-      <div class="hint">※ 最高画質はH3の上限（768p）。SNS投稿用なら「高画質」以上がおすすめ。</div>
-
-      <label class="lbl">仕上げの丁寧さ（ステップ数）</label>
-      <select id="steps" class="txt">
-        <option value="15">はやい（15）</option>
-        <option value="20" selected>標準（20）</option>
-        <option value="25">ていねい（25）</option>
-      </select>
-
-      <label class="lbl">シード値（空欄＝毎回ランダム。数字を入れると同じ数字で似た結果を再現できる）</label>
-      <input class="txt" id="seed" placeholder="空欄でOK。前回の値は生成結果の下に表示されます">
-
-      <label class="lbl" style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <input type="checkbox" id="noText" checked style="width:18px;height:18px;accent-color:var(--ac)">
-        画面に文字・ロゴ・透かしを出さない（推奨）
-      </label>
-
-      <label class="lbl" style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <input type="checkbox" id="fastMode" style="width:18px;height:18px;accent-color:var(--ac2)">
-        ⚡ 高速モード（約1.5〜2倍速で費用も削減。画質・動きがわずかに変わる場合あり）
-      </label>
-    </details>
-
-    <label class="lbl" style="display:flex;align-items:center;gap:8px;cursor:pointer">
-      <input type="checkbox" id="autoStop" checked style="width:18px;height:18px;accent-color:var(--ac)">
-      生成が終わったらサーバーを自動停止する（課金ストップ・おすすめ）
-    </label>
-
-    <div style="margin-top:14px">
-      <button class="btn-main" id="btnGen" onclick="generate()">🚀 動画を生成する</button>
-    </div>
-    <div class="cost" id="costText"></div>
-  </div>
-
-  <!-- 進捗 -->
-  <div class="card hidden" id="progCard">
-    <div class="status-big">
-      <div class="spinner"></div>
-      <div class="msg" id="progMsg">準備中…</div>
-      <div class="elapsed" id="elapsed"></div>
     </div>
   </div>
 
-  <!-- 結果 -->
-  <div class="card hidden" id="doneCard">
-    <b>✅ 完成しました！</b>
-    <video id="result" controls autoplay loop></video>
-    <div class="hint">動画は「outputs」フォルダにも保存されています。右クリック→「名前を付けて保存」もできます。</div>
-    <div class="hint" id="seedInfo"></div>
-  </div>
-  <div class="card hidden" id="errCard">
-    <div class="row" style="justify-content:space-between">
-      <b style="color:var(--ng)">⚠️ エラーが発生しました</b>
-      <button style="padding:6px 12px;font-size:12.5px" onclick="clearError()">✕ 閉じる</button>
-    </div>
-    <div class="err" id="errMsg"></div>
-    <div class="hint">・GPUの空きがない場合は時間をおいて再試行してください<br>・何度も失敗する場合はこの画面ごとClaudeに見せてください</div>
-  </div>
+  <!-- モバイル用ボトムナビ -->
+  <nav class="bottomnav">
+    <div class="nav sel" id="bnav_create" onclick="go('create')"><span class="ico">✨</span>作成</div>
+    <div class="nav" id="bnav_elements" onclick="go('elements')"><span class="ico">📦</span>エレメント</div>
+    <div class="nav" id="bnav_library" onclick="go('library')"><span class="ico">🎞️</span>作品</div>
+    <div class="nav" id="bnav_settings" onclick="go('settings')"><span class="ico">⚙️</span>設定</div>
+  </nav>
 
-  <!-- 履歴・ギャラリー -->
-  <div class="card hidden" id="galCard">
-    <b>📚 これまでの作品と生成記録</b>
-    <div class="hint">プロンプトは📋でコピー、↩️で上のフォームにまるごと呼び出せます（シード値込み＝似た動画を再現可能）</div>
-    <div id="histList" style="margin-top:10px"></div>
-    <div class="gal" id="gallery" style="margin-top:10px"></div>
-  </div>
+  <div class="toast" id="toast"></div>
 </div>
 
 <script>
 let mode = 't2v', aspect = '16:9', imgB64 = null, imgName = null, hasKey = false, generating = false;
+let view = 'create';
 
 function $(id) { return document.getElementById(id); }
+
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._tm); t._tm = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ---------- 画面切り替え ----------
+function go(v) {
+  view = v;
+  ['create', 'elements', 'library', 'settings'].forEach(x => {
+    $('view-' + x).classList.toggle('hidden', x !== v);
+    $('nav_' + x).classList.toggle('sel', x === v);
+    $('bnav_' + x).classList.toggle('sel', x === v);
+  });
+  if (v === 'library') refreshGallery();
+  if (v === 'elements') renderElemPage();
+  window.scrollTo({ top: 0 });
+}
 
 const MODE_PLACEHOLDER = {
   t2v: '例：実写のシネマティックな映像、夕暮れの光。桜並木を白い猫が歩いてくる。カメラはゆっくり猫に寄っていく。[3秒-] 猫が立ち止まり、花びらが舞う中で空を見上げる。BGMは穏やかなピアノ。',
   i2v: '例：この画像の女性がゆっくりカメラの方へ振り返り、優しく微笑む。髪が風で軽く揺れる。カメラはわずかに寄る。背景はそのまま。',
   flf2v: '例：最初の画像の昼の街並みから、最後の画像の夜景へ、時間が流れるように滑らかに変化していく。カメラはゆっくり右へ移動しながら繋ぐ。',
-  r2v: '例：@画像1の女性と@画像2の男性が、カフェの窓際で向かい合って楽しそうに話している。@画像1がコーヒーを一口飲んで微笑む。午後の柔らかい光。（画像1枚なら「@画像1の人物が〜」でOK）',
+  r2v: '例：@画像1の女性と@画像2の男性が、カフェの窓際で向かい合って楽しそうに話している。@画像1がコーヒーを一口飲んで微笑む。午後の柔らかい光。',
   edit: '例：@元動画の人物の顔だけを@画像1の顔に置き換える。髪型・服装・背景・動き・カメラワークは@元動画のまま一切変えない。',
 };
 
@@ -342,16 +559,17 @@ function setMode(m) {
   renderElemChips();
 }
 
-// ---------- エレメント（登録した人物・場所の使い回し） ----------
-let ELEMS = [];                 // サーバーに登録済みのエレメント一覧
-let selElems = new Set();       // 今回の生成で使うエレメントのid
-let elemFilesBuf = [];          // 登録フォームで選択中の画像
+// ---------- エレメント ----------
+let ELEMS = [];
+let selElems = new Set();
+let elemFilesBuf = [];
+let editingElemId = null;
 
 const ELEM_ICON = { '人物': '👤', '場所': '📍', '物': '🧥', 'スタイル': '🎨' };
 
 async function loadElems() {
   try { const r = await api('/api/elements'); ELEMS = r.elements || []; } catch (e) { ELEMS = []; }
-  renderElemChips(); renderElemList();
+  renderElemChips(); renderElemPage();
 }
 
 function elemUsable() { return ['t2v', 'r2v', 'edit'].includes(mode); }
@@ -360,48 +578,72 @@ function renderElemChips() {
   const box = $('elemChips'); if (!box) return;
   box.innerHTML = '';
   if (!elemUsable()) {
-    $('elemHint').textContent = '※このモード（画像を動かす／始点→終点）はAIの仕様上エレメントを使えません。使う場合は「文章から」「人物固定」「部分編集」で。';
+    $('elemHint').textContent = 'このモードではエレメントは使えません（AI仕様）。使う場合は 文章から／人物固定／部分編集 で。';
     selElems.clear();
     return;
   }
   if (ELEMS.length === 0) {
-    box.innerHTML = '<span class="hint" style="margin:0">まだ登録がありません。下の「➕エレメントの登録」から人物や場所を登録すると、ここに並びます。</span>';
+    box.innerHTML = '<span class="hint" style="margin:0">未登録です。「登録・編集 →」から人物や場所を登録できます。</span>';
     $('elemHint').textContent = '';
     return;
   }
   ELEMS.forEach(el => {
-    const chip = document.createElement('div');
     const on = selElems.has(el.id);
-    chip.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 10px 4px 4px;border-radius:20px;cursor:pointer;border:2px solid ' + (on ? 'var(--ac2)' : '#445') + ';background:' + (on ? 'rgba(20,120,110,.25)' : 'rgba(0,0,0,.2)');
-    chip.innerHTML = '<img src="/elements/' + el.images[0] + '" style="width:30px;height:30px;object-fit:cover;border-radius:50%">' +
-      '<span style="font-size:13px">' + (on ? '✅ ' : '') + ELEM_ICON[el.type] + ' @' + el.name + '</span>';
-    chip.title = 'クリックで使用ON/OFF。プロンプトでは @' + el.name + ' と書いて指定できます';
+    const chip = document.createElement('div');
+    chip.className = 'chip' + (on ? ' on' : '');
+    chip.innerHTML = '<img src="/elements/' + el.images[0] + '">' +
+      '<span>' + (on ? '✓ ' : '') + ELEM_ICON[el.type] + ' @' + el.name + '</span>';
+    chip.title = 'クリックで使用ON/OFF';
     chip.onclick = () => { selElems.has(el.id) ? selElems.delete(el.id) : selElems.add(el.id); renderElemChips(); };
     box.appendChild(chip);
   });
   const n = selElems.size;
-  $('elemHint').textContent = n === 0 ? 'クリックで選択 → プロンプトで「@名前」と書いてその人物・場所を指定できます。'
-    : '✅ ' + n + '個を使用中。プロンプトで @名前 と書いて指定してください。' + (mode === 't2v' ? '（エレメント使用中は参照エンジンで生成されるため、時間・費用が約2〜3倍になります）' : '');
+  $('elemHint').textContent = n === 0 ? 'クリックで選択 → プロンプトで「@名前」と書いて指定。'
+    : '✓ ' + n + '個使用中。プロンプトで @名前 と書いて指定。' + (mode === 't2v' ? '（参照エンジン使用のため時間・費用 約2〜3倍）' : '');
 }
 
-function renderElemList() {
-  const box = $('elemList'); if (!box) return;
-  box.innerHTML = '';
+function openElemForm(el) {
+  editingElemId = el ? el.id : null;
+  $('elemFormTitle').textContent = el ? '「' + el.name + '」を編集' : '新しいエレメントを登録';
+  $('elemName').value = el ? el.name : '';
+  $('elemType').value = el ? el.type : '人物';
+  $('elemMemo').value = el ? (el.memo || '') : '';
+  $('elemFiles').value = ''; elemFilesBuf = [];
+  $('elemFilesLabel').textContent = el ? '画像を選ばなければ現在の' + el.images.length + '枚のまま' : '';
+  $('elemFormCard').classList.remove('hidden');
+  window.scrollTo({ top: 0 });
+}
+
+function closeElemForm() { $('elemFormCard').classList.add('hidden'); editingElemId = null; }
+
+function renderElemPage() {
+  const grid = $('elemGrid'); if (!grid) return;
+  grid.innerHTML = '';
+  const add = document.createElement('div');
+  add.className = 'ecard newcard';
+  add.innerHTML = '<div><div style="font-size:26px">＋</div>新規登録</div>';
+  add.onclick = () => openElemForm(null);
+  grid.appendChild(add);
   ELEMS.forEach(el => {
-    const card = document.createElement('div');
-    card.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px;border:1px solid #445;border-radius:10px;width:110px';
-    card.innerHTML = '<img src="/elements/' + el.images[0] + '" style="width:64px;height:64px;object-fit:cover;border-radius:8px">' +
-      '<div style="font-size:12px;text-align:center">' + ELEM_ICON[el.type] + ' @' + el.name + '</div>' +
-      (el.images.length > 1 ? '<div style="font-size:11px;color:var(--sub)">画像' + el.images.length + '枚</div>' : '');
-    const del = document.createElement('button');
-    del.textContent = '🗑️ 削除';
-    del.style.cssText = 'font-size:11px;padding:3px 8px;background:#5a2430';
-    del.onclick = async () => {
-      if (!confirm('エレメント「' + el.name + '」を削除しますか？')) return;
-      try { const r = await api('/api/elements/delete', { method: 'POST', body: JSON.stringify({ id: el.id }) }); ELEMS = r.elements || []; selElems.delete(el.id); renderElemChips(); renderElemList(); } catch (e) { alert(e.message); }
+    const c = document.createElement('div');
+    c.className = 'ecard';
+    c.innerHTML = '<img src="/elements/' + el.images[0] + '?t=' + Date.now() + '" title="クリックで拡大" onclick="window.open(this.src)">' +
+      '<div class="ename">@' + el.name + '</div>' +
+      '<div class="etype">' + ELEM_ICON[el.type] + ' ' + el.type + (el.images.length > 1 ? '・画像' + el.images.length + '枚' : '') + '</div>' +
+      '<div class="ememo">' + (el.memo || '').replace(/</g, '&lt;') + '</div>';
+    const row = document.createElement('div'); row.className = 'row';
+    const eb = document.createElement('button'); eb.textContent = '✏️ 編集'; eb.onclick = () => openElemForm(el);
+    const db = document.createElement('button'); db.textContent = '🗑️'; db.className = 'btn-danger';
+    db.onclick = async () => {
+      if (!confirm('「' + el.name + '」を削除しますか？')) return;
+      try {
+        const r = await api('/api/elements/delete', { method: 'POST', body: JSON.stringify({ id: el.id }) });
+        ELEMS = r.elements || []; selElems.delete(el.id);
+        renderElemChips(); renderElemPage(); toast('削除しました');
+      } catch (e) { alert(e.message); }
     };
-    card.appendChild(del);
-    box.appendChild(card);
+    row.appendChild(eb); row.appendChild(db); c.appendChild(row);
+    grid.appendChild(c);
   });
 }
 
@@ -422,16 +664,21 @@ $('elemFiles').addEventListener('change', e => {
 
 async function registerElement() {
   const name = $('elemName').value.trim().replace(/^@+/, '');
-  if (!name) { alert('エレメントの名前を入力してください（例：ユキ）'); return; }
-  if (elemFilesBuf.length === 0) { alert('画像を1〜3枚選択してください'); return; }
+  if (!name) { alert('名前を入力してください（例：ユキ）'); return; }
+  if (!editingElemId && elemFilesBuf.length === 0) { alert('画像を1〜3枚選択してください'); return; }
+  const body = { name, type: $('elemType').value, memo: $('elemMemo').value };
+  if (elemFilesBuf.length > 0) body.images = elemFilesBuf;
   try {
-    const r = await api('/api/elements', { method: 'POST', body: JSON.stringify({ name, type: $('elemType').value, memo: $('elemMemo').value, images: elemFilesBuf }) });
+    const path = editingElemId ? '/api/elements/update' : '/api/elements';
+    if (editingElemId) body.id = editingElemId;
+    const r = await api(path, { method: 'POST', body: JSON.stringify(body) });
     ELEMS = r.elements || [];
-    $('elemName').value = ''; $('elemMemo').value = ''; $('elemFiles').value = ''; $('elemFilesLabel').textContent = ''; elemFilesBuf = [];
-    renderElemChips(); renderElemList();
+    closeElemForm(); renderElemChips(); renderElemPage();
+    toast(editingElemId ? '更新しました' : '「@' + name + '」を登録しました');
   } catch (e) { alert(e.message); }
 }
 
+// ---------- 素材入力 ----------
 function clearZone(z) {
   if (z === 'img') { imgB64 = null; imgName = null; $('preview').innerHTML = ''; $('file').value = ''; $('clrImg').classList.add('hidden'); }
   if (z === 'flfFirst') { flfFirstB64 = null; flfFirstName = null; $('flfFirstPrev').innerHTML = ''; $('flfFirst').value = ''; $('clrFlfFirst').classList.add('hidden'); }
@@ -442,7 +689,6 @@ function clearZone(z) {
 }
 
 let editImages = [];
-// 参照画像1枚ごとに「@名前」を付けられるサムネイルを作る（プロンプトから @名前 で呼び出せる）
 function addRefItem(arr, previewEl, clrBtnId, f) {
   const r = new FileReader();
   r.onload = () => {
@@ -451,14 +697,14 @@ function addRefItem(arr, previewEl, clrBtnId, f) {
     const wrap = document.createElement('div');
     wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:3px';
     const img = document.createElement('img');
-    img.src = r.result; img.style.cssText = 'max-height:80px;border-radius:6px';
+    img.src = r.result; img.style.cssText = 'max-height:78px;border-radius:8px;margin:0';
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:center;gap:2px;font-size:12px;color:var(--ac2)';
     row.textContent = '@';
     const inp = document.createElement('input');
     inp.type = 'text'; inp.value = item.tag;
-    inp.style.cssText = 'width:80px;font-size:12px;padding:2px 4px;border-radius:5px;border:1px solid #445;background:rgba(0,0,0,.25);color:inherit;text-align:center';
-    inp.title = 'プロンプトで @この名前 と書くとこの画像を指定できます（名前は自由に変更OK）';
+    inp.style.cssText = 'width:76px;font-size:12px;padding:2px 4px;border-radius:6px;border:1px solid var(--line);background:rgba(0,0,0,.3);color:inherit;text-align:center';
+    inp.title = 'プロンプトで @この名前 と書いて指定（変更OK）';
     inp.addEventListener('click', ev => ev.stopPropagation());
     inp.addEventListener('input', () => { item.tag = inp.value.trim().replace(/^@+/, ''); });
     row.appendChild(inp);
@@ -469,8 +715,7 @@ function addRefItem(arr, previewEl, clrBtnId, f) {
   r.readAsDataURL(f);
 }
 $('editRefFiles').addEventListener('change', e => {
-  editImages = [];
-  $('editRefPreview').innerHTML = '';
+  editImages = []; $('editRefPreview').innerHTML = '';
   [...e.target.files].slice(0, 4).forEach(f => addRefItem(editImages, $('editRefPreview'), 'clrEditRef', f));
 });
 
@@ -492,21 +737,21 @@ let refVideoB64 = null, refVideoName = null;
 $('refVideo').addEventListener('change', e => {
   const f = e.target.files[0]; if (!f) return;
   if (!/\.(mp4|webm|mkv)$/i.test(f.name)) {
-    alert('この動画形式は使えません（対応: MP4/WebM/MKV）。\niPhoneの.MOV動画などは、無料の変換アプリ・サイトでMP4にしてから選択してください。');
+    alert('この動画形式は使えません（対応: MP4/WebM/MKV）。\niPhoneの.MOVなどはMP4に変換してから選択してください。');
     e.target.value = ''; return;
   }
-  if (f.size > 60 * 1024 * 1024) { alert('動画は60MB以下にしてください（短く切り出すのがおすすめ）'); e.target.value = ''; return; }
+  if (f.size > 60 * 1024 * 1024) { alert('動画は60MB以下にしてください'); e.target.value = ''; return; }
   const r = new FileReader();
-  r.onload = () => { refVideoB64 = r.result.split(',')[1]; refVideoName = f.name; $('refVideoPrev').textContent = '🎞️ ' + f.name + '（' + Math.round(f.size / 1024 / 1024 * 10) / 10 + 'MB）を使用'; $('clrVideo').classList.remove('hidden'); };
+  r.onload = () => { refVideoB64 = r.result.split(',')[1]; refVideoName = f.name; $('refVideoPrev').textContent = '🎞️ ' + f.name + '（' + Math.round(f.size / 1024 / 1024 * 10) / 10 + 'MB）'; $('clrVideo').classList.remove('hidden'); };
   r.readAsDataURL(f);
 });
 
 let refImages = [];
 $('refFiles').addEventListener('change', e => {
-  refImages = [];
-  $('refPreview').innerHTML = '';
+  refImages = []; $('refPreview').innerHTML = '';
   [...e.target.files].slice(0, 4).forEach(f => addRefItem(refImages, $('refPreview'), 'clrRef', f));
 });
+
 function setAspect(a) {
   aspect = a;
   document.querySelectorAll('#aspectSeg button').forEach(b => b.classList.toggle('sel', b.dataset.a === a));
@@ -514,18 +759,15 @@ function setAspect(a) {
 function updateSec() {
   const s = $('seconds').value;
   $('secLabel').textContent = s + '秒';
-  $('costText').textContent = 'このサーバー(H100)での目安: 約' + Math.round(s * 3.5) + '〜' + Math.round(s * 5) + '円/本 + 起動時間ぶんのサーバー代';
+  $('costText').textContent = '目安 約' + Math.round(s * 3.5) + '〜' + Math.round(s * 5) + '円/本 + サーバー起動時間';
   updatePromptHint();
 }
-
 function updatePromptHint() {
   const len = $('prompt').value.length;
-  const s = +$('seconds').value;
-  const cuts = s <= 6 ? '2〜3カット' : '4〜6カット';
-  let msg = `現在 ${len}字｜ラフ生成は150〜800字・${cuts}で十分｜本気の作り込みは【見出し】で構造化すれば数千字もOK（時間区切り＋カメラ指定＋「〜しない」の禁止事項をセットで）`;
+  let msg = '現在 ' + len + '字（目安150〜800字。長文は【見出し】やショット割りで構造化）';
   let color = '';
   if (len > 1000 && !$('prompt').value.includes('【') && !/ショット|\[\d/.test($('prompt').value)) {
-    msg += '｜⚠️ 長文は【見出し】やショット割りで構造化しないと後半が無視されがちです';
+    msg += '｜⚠️ 構造化しないと後半が無視されがち';
     color = 'var(--warn)';
   }
   $('promptHint').textContent = msg;
@@ -555,6 +797,7 @@ function loadImage(f) {
   r.readAsDataURL(f);
 }
 
+// ---------- GPTs連携 ----------
 async function pasteFromGPTs() {
   try {
     const text = await navigator.clipboard.readText();
@@ -568,7 +811,6 @@ async function pasteFromGPTs() {
 
 function applyGPTs(text) {
   const applied = [];
-  // プロンプト本文と設定部を分離
   const lines = text.replace(/\r/g, '').split('\n');
   let promptStart = -1, promptEnd = lines.length;
   lines.forEach((l, i) => {
@@ -628,15 +870,15 @@ function applyGPTs(text) {
 
   updateSec();
   if (applied.length === 0 && !promptText) {
-    // 設定ブロックが無い＝プロンプト本文だけのコピーとみなす
     $('prompt').value = text.trim(); updatePromptHint();
-    $('pasteResult').textContent = '✅ プロンプト本文として貼り付けました（設定は手動で選んでください）';
+    $('pasteResult').textContent = '✅ プロンプト本文として貼り付けました（設定は手動で選択）';
   } else {
-    $('pasteResult').textContent = '✅ 自動入力完了 → ' + applied.join('｜') + '｜内容を確認して🚀を押してください';
+    $('pasteResult').textContent = '✅ 自動入力完了 → ' + applied.join('｜');
   }
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  go('create');
 }
 
+// ---------- API ----------
 async function api(path, opts) {
   const r = await fetch(path, opts);
   const j = await r.json().catch(() => ({}));
@@ -649,16 +891,10 @@ async function saveKey() {
   try {
     await api('/api/setkey', { method: 'POST', body: JSON.stringify({ api_key: $('apikey').value }) });
     hasKey = true;
-    $('setup').classList.add('hidden');
-    showMain();
+    $('apikey').value = '';
+    toast('APIキーを保存しました');
+    go('create');
   } catch (e) { $('keyerr').textContent = e.message; }
-}
-
-function showMain() {
-  $('serverCard').classList.remove('hidden');
-  $('genCard').classList.remove('hidden');
-  $('galCard').classList.remove('hidden');
-  refreshGallery();
 }
 
 async function clearError() {
@@ -669,13 +905,14 @@ async function clearError() {
 async function podStart() { $('btnStart').disabled = true; try { await api('/api/start', { method: 'POST' }); } catch (e) { alert(e.message); } }
 async function podStop() { $('btnStop').disabled = true; try { await api('/api/stop', { method: 'POST' }); } catch (e) { alert(e.message); } }
 
+// ---------- 生成 ----------
 async function generate() {
   if (generating) return;
   const prompt = $('prompt').value.trim();
   if (!prompt) { alert('動画の内容を入力してください'); return; }
   if (mode === 'i2v' && !imgB64) { alert('画像を選択してください'); return; }
   if (mode === 'flf2v' && (!flfFirstB64 || !flfLastB64)) { alert('最初と最後の画像を両方選択してください'); return; }
-  if (mode === 'r2v' && refImages.length === 0 && selElems.size === 0) { alert('エレメントを選ぶか、参照画像を1枚以上選択してください'); return; }
+  if (mode === 'r2v' && refImages.length === 0 && selElems.size === 0) { alert('エレメントを選ぶか、参照画像を選択してください'); return; }
   if (mode === 'edit' && !refVideoB64) { alert('編集する元動画を選択してください'); return; }
   $('doneCard').classList.add('hidden');
   $('errCard').classList.add('hidden');
@@ -702,26 +939,26 @@ async function generate() {
   } catch (e) { alert(e.message); }
 }
 
-const STATE_MSG = { starting_pod: 'GPUサーバーを起動しています…（1〜2分）', waiting_comfy: '動画生成エンジンの準備中…（1〜2分）', uploading: '画像をアップロード中…', generating: '動画を生成中…（5秒動画で約5分／15秒で約15分）', downloading: '動画をPCに保存中…', stopping_pod: '完成！サーバーを自動停止しています…' };
+const STATE_MSG = { starting_pod: 'GPUサーバーを起動しています…（1〜2分）', waiting_comfy: '動画生成エンジンの準備中…（1〜2分）', uploading: '素材をアップロード中…', generating: '動画を生成中…', downloading: '動画をPCに保存中…', stopping_pod: '完成！サーバーを自動停止しています…' };
 
+let pollFails = 0;
 async function poll() {
   try {
     const s = await api('/api/status');
     const pod = s.pod, job = s.job;
     const led = $('podLed'), txt = $('podText');
-    if (pod === 'RUNNING') { led.className = 'led on'; txt.textContent = 'サーバー：起動中（課金中 約210円/時）'; }
-    else if (pod === 'EXITED') { led.className = 'led off'; txt.textContent = 'サーバー：停止中（課金なし）'; }
-    else if (pod === 'NO_KEY') { txt.textContent = 'APIキー未設定'; }
-    else { led.className = 'led busy'; txt.textContent = 'サーバー：' + pod; }
+    if (pod === 'RUNNING') { led.className = 'led on'; txt.textContent = '起動中（課金中 約500円/時）'; }
+    else if (pod === 'EXITED') { led.className = 'led off'; txt.textContent = '停止中（課金なし）'; }
+    else if (pod === 'NO_KEY') { txt.textContent = 'APIキー未設定（設定ページへ）'; }
+    else { led.className = 'led busy'; txt.textContent = pod; }
     $('btnStart').disabled = (pod === 'RUNNING');
     $('btnStop').disabled = (pod === 'EXITED');
 
     if (s.balance && typeof s.balance.usd === 'number') {
       const usd = s.balance.usd, yen = Math.round(usd * 150);
       $('balancePill').style.display = '';
-      $('balanceText').textContent = `残高 $${usd.toFixed(2)}（約${yen.toLocaleString()}円）`;
+      $('balanceText').textContent = '残高 $' + usd.toFixed(2) + '（約' + yen.toLocaleString() + '円）';
       $('balanceText').style.color = usd < 5 ? 'var(--ng)' : usd < 15 ? 'var(--warn)' : '';
-      $('balancePill').title = usd < 5 ? '残高が少なくなっています。管理者にチャージを依頼してください' : '';
     }
 
     const busy = ['starting_pod','waiting_comfy','uploading','generating','downloading','stopping_pod'].includes(job.state);
@@ -731,15 +968,19 @@ async function poll() {
     if (busy) {
       $('errCard').classList.add('hidden');
       $('doneCard').classList.add('hidden');
-      $('progMsg').textContent = job.message || STATE_MSG[job.state] || '処理中…';
+      const m = job.message || STATE_MSG[job.state] || '処理中…';
+      $('progMsg').textContent = m;
+      const pm = m.match(/（(\d+)%）/);
+      if (pm) { $('pbar').classList.remove('wave'); $('pbarFill').style.width = pm[1] + '%'; }
+      else { $('pbar').classList.add('wave'); }
       if (job.started_at) {
-        const m = Math.floor((Date.now()/1000 - job.started_at) / 60), sec = Math.floor((Date.now()/1000 - job.started_at) % 60);
-        $('elapsed').textContent = '経過時間: ' + m + '分' + sec + '秒';
+        const el = Math.floor(Date.now()/1000 - job.started_at);
+        $('elapsed').textContent = '経過 ' + Math.floor(el/60) + '分' + (el%60) + '秒';
       }
     }
     if (job.state === 'done' && job.video) {
       $('doneCard').classList.remove('hidden');
-      if (job.seed) $('seedInfo').textContent = '今回のシード値: ' + job.seed + '（この数字を「こだわり設定」に入れると似た結果を再現できます）';
+      if (job.seed) $('seedInfo').textContent = 'シード値: ' + job.seed + '（こだわり設定に入れると似た結果を再現）';
       const v = $('result');
       const src = '/videos/' + encodeURIComponent(job.video);
       if (!v.src.endsWith(encodeURIComponent(job.video))) { v.src = src; refreshGallery(); }
@@ -750,36 +991,39 @@ async function poll() {
     }
     pollFails = 0;
   } catch (e) {
-    // ローカルサーバーに繋がらない（再起動・停止中など）
     pollFails++;
     if (pollFails >= 3) {
       $('podLed').className = 'led off';
-      $('podText').textContent = '⚠️ ツールと接続が切れました。ページを再読み込み（F5）してください';
+      $('podText').textContent = '⚠️ 接続が切れました。ページを再読み込み（F5）してください';
       $('progCard').classList.add('hidden');
     }
   }
 }
-let pollFails = 0;
 
+// ---------- 作品ライブラリ ----------
 let HIST = [];
 async function refreshGallery() {
   try {
     const h = await api('/api/history');
     HIST = h.history || [];
+    const MODE_LABEL = { i2v: '🖼️画像', flf2v: '🎬始点→終点', r2v: '👤人物固定', edit: '✂️部分編集', t2v: '📝文章' };
     $('histList').innerHTML = HIST.map((e, i) => `
-      <div style="display:flex;gap:12px;background:var(--card2);border-radius:10px;padding:10px;margin-bottom:10px;flex-wrap:wrap">
-        <video src="/videos/${encodeURIComponent(e.video)}" controls preload="metadata" style="width:220px;margin:0;flex-shrink:0"></video>
+      <div class="hcard">
+        <video src="/videos/${encodeURIComponent(e.video)}" controls preload="metadata"></video>
         <div style="flex:1;min-width:200px">
-          <div style="font-size:12px;color:var(--sub)">${e.time}｜${e.mode === 'i2v' ? '🖼️画像' : e.mode === 'flf2v' ? '🎬始点→終点' : e.mode === 'r2v' ? '👤人物固定' : e.mode === 'edit' ? '✂️部分編集' : '📝文章'}${e.fast ? '｜⚡高速' : ''}｜${e.seconds}秒｜${e.aspect}｜シード:${e.seed}</div>
-          <div style="font-size:13px;line-height:1.6;margin:6px 0;max-height:66px;overflow:hidden" id="hp${i}">${(e.prompt || '').replace(/</g, '&lt;')}</div>
-          <a href="javascript:void(0)" style="font-size:12px" onclick="$('hp${i}').style.maxHeight = $('hp${i}').style.maxHeight ? '' : '66px'">全文を表示/たたむ</a>
-          <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
-            <button style="font-size:12.5px;padding:8px 12px" onclick="copyPrompt(${i}, this)">📋 プロンプトをコピー</button>
-            <button style="font-size:12.5px;padding:8px 12px" onclick="restoreEntry(${i})">↩️ 設定を呼び出す</button>
+          <div class="hmeta">
+            <span>${e.time}</span><span>${MODE_LABEL[e.mode] || '📝文章'}</span>${e.fast ? '<span>⚡高速</span>' : ''}
+            <span>${e.seconds}秒</span><span>${e.aspect}</span>
+            ${(e.elements || []).map(n => '<span>📦@' + n + '</span>').join('')}
+          </div>
+          <div class="hprompt" id="hp${i}">${(e.prompt || '').replace(/</g, '&lt;')}</div>
+          <a href="javascript:void(0)" style="font-size:11.5px" onclick="$('hp${i}').style.maxHeight = $('hp${i}').style.maxHeight ? '' : '63px'">全文を表示／たたむ</a>
+          <div class="row" style="margin-top:8px">
+            <button style="font-size:12px;padding:7px 12px" onclick="copyPrompt(${i}, this)">📋 コピー</button>
+            <button style="font-size:12px;padding:7px 12px" onclick="restoreEntry(${i})">↩️ 設定を呼び出す</button>
           </div>
         </div>
-      </div>`).join('');
-    // 履歴に無い古い動画も一応表示
+      </div>`).join('') || '<div class="hint">まだ作品がありません。「✨作成」から最初の動画を作りましょう。</div>';
     const g = await api('/api/videos');
     const known = new Set(HIST.map(e => e.video));
     $('gallery').innerHTML = g.videos.filter(v => !known.has(v)).map(v => '<video src="/videos/' + encodeURIComponent(v) + '" controls preload="metadata"></video>').join('');
@@ -787,11 +1031,9 @@ async function refreshGallery() {
 }
 
 function copyPrompt(i, btn) {
-  const e = HIST[i];
-  let text = e.prompt || '';
-  navigator.clipboard.writeText(text).then(() => {
+  navigator.clipboard.writeText(HIST[i].prompt || '').then(() => {
     const old = btn.textContent;
-    btn.textContent = '✅ コピーしました';
+    btn.textContent = '✅ コピー済み';
     setTimeout(() => { btn.textContent = old; }, 1500);
   });
 }
@@ -814,18 +1056,21 @@ function restoreEntry(i) {
   $('qualityMp').value = e.quality_mp || '0.4';
   $('steps').value = e.steps || '20';
   $('seed').value = e.seed || '';
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  go('create');
+  toast('設定を呼び出しました。素材（画像・動画）だけ選び直してください');
 }
 
+// ---------- 初期化 ----------
 (async () => {
   try {
     const c = await api('/api/config');
     hasKey = c.has_key;
     if (c.version) $('verTag').textContent = 'v' + c.version;
     $('autoStop').checked = c.auto_stop !== false;
-    if (hasKey) { showMain(); } else { $('setup').classList.remove('hidden'); }
-  } catch (e) { $('setup').classList.remove('hidden'); }
+    if (!hasKey) go('settings');
+  } catch (e) { go('settings'); }
   loadElems();
+  refreshGallery();
   poll();
   setInterval(poll, 4000);
 })();
