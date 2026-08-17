@@ -151,6 +151,11 @@
       <button class="clearbtn hidden" id="clrVideo" onclick="clearZone('video')">✕ 動画の選択を取り消す</button>
       <input type="file" id="refVideo" accept=".mp4,.webm,.mkv,video/mp4" class="hidden">
 
+      <label class="lbl" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="keepAudio" checked> 🔊 元動画の音声をそのまま使う（声・言葉が完全に同じになる。おすすめ）
+      </label>
+      <div class="hint">ONにすると、完成した映像に元動画の音声をまるごと貼り直します（AIの作った音声は使いません）。しゃべる内容・声・音がすべて元動画と同一になります。</div>
+
       <label class="lbl">変更後の見た目の参照画像（任意・0〜4枚／JPG・PNG・WebP。例：差し替えたい顔や服の画像）</label>
       <div class="drop" onclick="document.getElementById('editRefFiles').click()">
         クリックして画像を選択（画像なし＝下の指示文だけで変更もOK）
@@ -161,7 +166,7 @@
 
       <div class="hint">プロンプト欄に「何をどう変えるか」を書いてください（例：人物の顔だけを参照画像の女性に変える／服を赤いドレスに変える。それ以外は変えない）。※生成時間は通常の約3倍</div>
       <div class="hint" style="color:var(--warn)">⚠️ 実在の人物（有名人・知人）の動画を本人の同意なく顔・姿を差し替えることは禁止です（ライセンス違反・法的リスク）。自分たちで作った動画や、同意のある素材だけに使ってください。</div>
-      <div class="hint">💡 元動画で人物が口を動かしていると、AIが口の動きに合わせて声を自動生成します。話す内容を決めたいときは「🎙️セリフ・音の設定」のセリフ欄に日本語で記入、無音にしたいときは音バランスで「セリフなし」を選んでください（何も指定しない場合は自然な日本語になるよう調整済み）。</div>
+      <div class="hint">💡 元動画で人物が口を動かしていると、AIが口の動きに合わせて勝手に声を作ります。上の「🔊 元動画の音声をそのまま使う」をONにしておけば声は元動画と完全に同じになります。AIに新しい声で話させたいときだけOFFにして、「🎙️セリフ・音の設定」のセリフ欄に日本語で記入してください。</div>
     </div>
 
     <label class="lbl">どんな動画にしたい？（日本語OK。セリフ・音・カメラの動きも書ける）</label>
@@ -554,6 +559,7 @@ async function generate() {
       ref_images: mode === 'r2v' ? refImages : mode === 'edit' ? editImages : null,
       ref_video_b64: mode === 'edit' ? refVideoB64 : null,
       ref_video_name: refVideoName,
+      keep_audio: mode === 'edit' ? $('keepAudio').checked : false,
       fast_mode: $('fastMode').checked,
       dialogue: $('dialogue').value, voice: $('voice').value,
       bgm: $('bgm').value, se: $('se').value, mix: $('mix').value,
@@ -662,6 +668,7 @@ function restoreEntry(i) {
   const e = HIST[i];
   setMode(['r2v', 'i2v', 'flf2v', 'edit'].includes(e.mode) ? e.mode : 't2v');
   if ($('fastMode')) $('fastMode').checked = !!e.fast;
+  if ($('keepAudio')) $('keepAudio').checked = e.keep_audio === undefined ? true : !!e.keep_audio;
   $('prompt').value = e.prompt || '';
   $('dialogue').value = e.dialogue || '';
   $('voice').value = e.voice || '';

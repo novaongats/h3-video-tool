@@ -17,7 +17,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "2.6.4"
+SELF_VERSION = "2.6.5"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -467,6 +467,7 @@ def compose_prompt(p):
 
 def run_generation(params, image_blob, image_name):
     cfg = load_config()
+    src_video_path = None  # 部分編集で「元動画の音声を使う」とき、元動画の一時保存先
     try:
         mode = params.get("mode", "t2v")
 
@@ -575,8 +576,14 @@ def run_generation(params, image_blob, image_name):
             if not ref_video_b64:
                 raise RunPodError("編集する元動画が選択されていません")
             set_job(state="uploading", message="元動画をアップロード中…（サイズにより数十秒）")
+            src_video_bytes = base64.b64decode(ref_video_b64)
+            if params.get("keep_audio"):
+                # 完成後に元動画の音声を貼り直すため、元動画を一時保存しておく
+                src_video_path = os.path.join(OUTPUT_DIR, "_src_audio_tmp.mp4")
+                with open(src_video_path, "wb") as f:
+                    f.write(src_video_bytes)
             vup = comfy_upload_image(cfg, params.get("ref_video_name") or "ref_video.mp4",
-                                     base64.b64decode(ref_video_b64))
+                                     src_video_bytes)
             vname = vup.get("name")
             vsub = vup.get("subfolder") or ""
             wf["210"] = {"inputs": {"file": (vsub + "/" + vname) if vsub else vname},
@@ -690,6 +697,36 @@ def run_generation(params, image_blob, image_name):
         with urllib.request.urlopen(dl_req, timeout=300) as r, open(local_path, "wb") as f:
             f.write(r.read())
 
+        # 部分編集の「元動画の音声をそのまま使う」: AIの作った音声を元動画の音声に差し替える
+        audio_note = ""
+        if mode == "edit" and src_video_path and os.path.exists(src_video_path):
+            import shutil
+            import subprocess
+            set_job(message="元動画の音声を貼り付け中…")
+            if shutil.which("ffmpeg"):
+                tmp_out = local_path + ".audio.mp4"
+                try:
+                    r = subprocess.run(
+                        ["ffmpeg", "-y", "-v", "error", "-i", local_path, "-i", src_video_path,
+                         "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac",
+                         "-shortest", tmp_out],
+                        capture_output=True, timeout=180)
+                    if r.returncode == 0 and os.path.exists(tmp_out) and os.path.getsize(tmp_out) > 0:
+                        os.replace(tmp_out, local_path)
+                        audio_note = "（音声は元動画のまま）"
+                    else:
+                        audio_note = "（注意：音声の貼り付けに失敗したためAIの音声のままです）"
+                except Exception:
+                    audio_note = "（注意：音声の貼り付けに失敗したためAIの音声のままです）"
+                finally:
+                    if os.path.exists(tmp_out):
+                        try:
+                            os.remove(tmp_out)
+                        except OSError:
+                            pass
+            else:
+                audio_note = "（注意：このPCに音声処理ソフトffmpegが無いためAIの音声のままです）"
+
         if params.get("auto_stop"):
             # 他の人（別PC）の生成がキューに残っていたら停止しない
             others_busy = False
@@ -723,8 +760,9 @@ def run_generation(params, image_blob, image_name):
             "quality_mp": params.get("quality_mp", "0.4"),
             "steps": params.get("steps", "20"),
             "fast": bool(params.get("fast_mode")),
+            "keep_audio": bool(params.get("keep_audio")),
         })
-        set_job(state="done", message="完成！", video=local_name, error=None)
+        set_job(state="done", message="完成！" + audio_note, video=local_name, error=None)
     except RunPodError as e:
         set_job(state="error", message="", error=str(e))
     except urllib.error.HTTPError as e:
@@ -737,6 +775,12 @@ def run_generation(params, image_blob, image_name):
         set_job(state="error", message="", error="【タイムアウト】処理が時間内に終わりませんでした。もう一度お試しください")
     except Exception as e:
         set_job(state="error", message="", error=f"【不明なエラー】{type(e).__name__}: {e}")
+    finally:
+        if src_video_path and os.path.exists(src_video_path):
+            try:
+                os.remove(src_video_path)
+            except OSError:
+                pass
 
 
 # ---------- HTTPハンドラ ----------
