@@ -14,3 +14,5 @@ outputs/
 H3プロンプト攻略ガイド.md
 ローカルLLM構築指示プロンプト.md
 h3_tool/__pycache__/
+h3_tool/elements.json
+h3_tool/elements/
