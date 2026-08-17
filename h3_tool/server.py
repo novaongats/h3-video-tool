@@ -17,7 +17,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "2.6.5"
+SELF_VERSION = "2.6.6"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -555,6 +555,8 @@ def run_generation(params, image_blob, image_name):
             refs = params.get("ref_images") or []
             if mode == "r2v" and not refs:
                 raise RunPodError("参照画像が選択されていません（1〜4枚）")
+            # 参照画像を縮小せず高解像度のまま渡す（顔の一致度が大きく向上する公式推奨設定）
+            wf["136"]["inputs"]["ref_image_size"] = "max"
             set_job(state="uploading", message="参照素材をアップロード中…")
             for i, ref in enumerate(refs[:4]):
                 blob = base64.b64decode(ref["b64"])
@@ -593,7 +595,12 @@ def run_generation(params, image_blob, image_name):
                          "class_type": "GetVideoComponents", "_meta": {"title": "動画をコマに分解"}}
             wf["136"]["inputs"]["ref_videos.ref_video_0"] = ["211", 0]
             if refs:
-                target = f"変更後の見た目は参照画像（{pics}）に完全に合わせる。"
+                target = (f"人物の指定された部分だけを{pics}の人物に置き換える。顔立ち・目鼻・輪郭・肌の色は、"
+                          f"クリップの最初から最後まで一貫して{pics}に完全一致させること。"
+                          f"<Video 1>に映っている元の人物の顔は一切残さず、使用しない。"
+                          f"(Replace only the specified parts of the person with the character shown in {pics}. "
+                          f"Match the new face exactly to {pics} throughout the entire clip. "
+                          f"Do not keep or reuse the original person's face from <Video 1>.)")
             else:
                 target = "変更内容は以下の指示文に正確に従う。"
             # 元動画で口が動いていると、AIが意味不明な言語の音声を後付けしてしまう対策。
@@ -606,9 +613,10 @@ def run_generation(params, image_blob, image_name):
                 voice_rule = ("音声の規則: <Video 1>の人物が口を動かしている場合は、その口の動きに合わせて"
                               "自然で意味の通る日本語だけを話させる。中国語・英語・実在しない言語の発話は"
                               "絶対に禁止。口が動いていない場合は誰も話さず、環境音のみとする。")
-            prompt_text = ("[video editing + attribute transfer] <Video 1>の映像の動き、カメラワーク、構図、"
-                           "シーンの進行、タイミング、背景、照明を完全に維持する。以下で指示された部分だけを"
-                           f"変更し、それ以外は<Video 1>のまま一切変えない。{target}{voice_rule}\n\n" + prompt_text)
+            prompt_text = ("[video editing + attribute transfer] <Video 1>を演技とシーンのマスターとする。"
+                           "動き、カメラワーク、構図、シーンの進行、タイミング、背景、照明はすべて<Video 1>から"
+                           f"継承し、新しい動きを追加しない。{target}{voice_rule}\n\n"
+                           "変更の指示: " + prompt_text)
 
         wf[ids["prompt"]]["inputs"]["prompt" if mode not in ("r2v", "edit") else "value"] = prompt_text
 
