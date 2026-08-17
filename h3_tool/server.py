@@ -17,7 +17,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "2.6.1"
+SELF_VERSION = "2.6.2"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -589,7 +589,7 @@ def run_generation(params, image_blob, image_name):
                            "シーンの進行、タイミング、背景、照明を完全に維持する。以下で指示された部分だけを"
                            f"変更し、それ以外は<Video 1>のまま一切変えない。{target}\n\n" + prompt_text)
 
-        wf[ids["prompt"]]["inputs"]["prompt" if mode != "r2v" else "value"] = prompt_text
+        wf[ids["prompt"]]["inputs"]["prompt" if mode not in ("r2v", "edit") else "value"] = prompt_text
 
         set_job(state="generating", message="動画を生成中…（5秒動画で約5分。初回はさらに+2分）")
         try:
