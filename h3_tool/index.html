@@ -300,6 +300,7 @@
     <div class="nav sel" id="nav_create" onclick="go('create')"><span class="ico">✨</span>作成</div>
     <div class="nav" id="nav_elements" onclick="go('elements')"><span class="ico">📦</span>エレメント</div>
     <div class="nav" id="nav_library" onclick="go('library')"><span class="ico">🎞️</span>作品</div>
+    <div class="nav" id="nav_tips" onclick="go('tips')"><span class="ico">💡</span>コツ・FAQ</div>
     <div class="nav" id="nav_settings" onclick="go('settings')"><span class="ico">⚙️</span>設定</div>
     <div class="sidefoot" id="verTag"></div>
   </aside>
@@ -586,6 +587,105 @@
       <div class="gal" id="gallery"></div>
     </section>
 
+    <!-- ========== コツ・FAQ ========== -->
+    <section id="view-tips" class="hidden" style="max-width:820px;margin:0 auto">
+      <h2 class="pagetitle">💡 コツ・よくある質問</h2>
+      <div class="pagedesc">つまずきやすいポイントの解決集。質問をクリックすると答えが開きます。</div>
+
+      <div class="card">
+        <b>📝 プロンプトの基本</b>
+        <details><summary>日本語で書いていいの？英語のほうがいい？</summary>
+          <div class="hint">日本語でOKです。セリフも日本語で書けます。無理に英語にする必要はありません。</div>
+        </details>
+        <details><summary>何文字くらい書けばいい？</summary>
+          <div class="hint">目安は<b>150〜800字</b>。本気で作り込むときは【見出し】やカット割りで構造化すれば数千字でもOK。ただし構造化しない長文は後半が無視されがちです。</div>
+        </details>
+        <details><summary>クオリティを上げる書き方のコツは？</summary>
+          <div class="hint">①冒頭でスタイル宣言（例：実写のシネマティックな映像、夕暮れの光）②時間で区切る（例：[3秒-] 猫が立ち止まる）③カメラを指定（寄る・引く・パン）④「〜しない」の禁止事項も書く。<b>迷ったらプロンプト欄右上の「🤖GPTsで作る」</b>が楽です。質問に答えるだけでプロ級の設定一式ができて、「📋貼り付け」で全項目が自動入力されます。</div>
+        </details>
+      </div>
+
+      <div class="card">
+        <b>🗣️ セリフ・音</b>
+        <details><summary>会話をさせたい（2人以上）</summary>
+          <div class="hint">セリフ欄に1行1セリフで書きます：<br>@ユキ：ねえ、これ見て<br>@レン：おお、すごいね<br>「声の感じ」欄に「ユキは高め、レンは低めの声」のように書けば声も分けられます。</div>
+        </details>
+        <details><summary>ナレーションを入れたい</summary>
+          <div class="hint">セリフ欄に「<b>ナレーション：</b>その日、街は静かだった」と書くだけ。画面の人物は口パクせず、画面外の声になります。</div>
+        </details>
+        <details><summary>完全にしゃべらせたくない</summary>
+          <div class="hint">右パネルの「音のバランス」で「<b>🔇 しゃべらせない</b>」を選択。BGMも消したいなら「🔇 完全に静かに」。</div>
+        </details>
+        <details><summary>勝手に変な言語（中国語など）をしゃべる</summary>
+          <div class="hint">このAIは「口が動いている映像」を見ると必ず声を当てようとするため、指示がないと謎の言語になることがあります。対策：①セリフ欄に内容を指定する ②「🔇しゃべらせない」を選ぶ ③部分編集なら「🔊元動画の音声をそのまま使う」をON（最強）。</div>
+        </details>
+        <details><summary>笑い声・唸り声など「言葉じゃない声」を入れたい</summary>
+          <div class="hint">セリフ欄ではなく<b>プロンプト本文に演技として描写</b>します。例：「女性は言葉を話さず、楽しそうな笑い声をあげる」。セリフ欄は「言葉を口パクさせる」専用と覚えてください。</div>
+        </details>
+      </div>
+
+      <div class="card">
+        <b>📦 エレメント・人物の一致</b>
+        <details><summary>エレメントはどのモードで使える？</summary>
+          <div class="hint">📝文章から・👤人物固定・✂️部分編集で使えます（タブの📦バッジが目印）。🖼️画像を動かす・🎬始点→終点はAIの仕様上使えません。</div>
+        </details>
+        <details><summary>使い方の基本</summary>
+          <div class="hint">エレメントページで人物・場所などを登録 → 作成画面でチップをクリックしてON → プロンプトで「@名前」と書いて指定。<b>@と打つと候補リストが出る</b>のでそこから選ぶのが確実です（ひらがな・カタカナを間違えても自動で吸収されます）。</div>
+        </details>
+        <details><summary>登録した人物に顔が似ない</summary>
+          <div class="hint">①<b>正面の顔が大きくはっきり写った高画質画像</b>を使う（顔が小さい・斜め・ぼやけはNG）②動画内で顔の向きが変わるなら正面＋横顔の2枚登録 ③体型が近いほど自然。気に入った結果が出たら<b>シード値</b>を控えておくと似た結果を再現できます。</div>
+        </details>
+        <details><summary>2人以上を同時に出したい</summary>
+          <div class="hint">人物エレメントを2つONにして「@ユキと@レンがカフェで話す」のように書くだけ。3人以上＋複雑な動きは顔が混ざることがあるので、1人1枚ずつ明確な顔画像で。</div>
+        </details>
+      </div>
+
+      <div class="card">
+        <b>🎬 絵コンテ・部分編集</b>
+        <details><summary>絵コンテから作りたい</summary>
+          <div class="hint">作成画面の「🎬絵コンテ」にカット順で画像を2〜6枚選択。ラフな手描きでもOK（構図・配置・アングルだけが使われ、絵柄はコピーされません）。<b>長さはカット数×3〜4秒</b>、本文に「カット1では〜、カット2では〜」と書くと精度最強です。</div>
+        </details>
+        <details><summary>動画の顔だけ差し替えたい</summary>
+          <div class="hint">✂️部分編集で元動画＋顔の参照画像（またはエレメント）を選び、「@元動画の人物の顔だけを@名前の顔に置き換える。他は一切変えない」。声を元のまま残す「🔊元動画の音声をそのまま使う」は最初からONです。</div>
+        </details>
+        <details><summary>部分編集の注意点</summary>
+          <div class="hint">①実在の人物（有名人・知人）の動画を本人の同意なく差し替えるのは禁止 ②動画はMP4/WebM/MKVのみ・60MBまで（iPhoneの.MOVは無料アプリでMP4に変換）③生成時間は通常の約3倍。</div>
+        </details>
+      </div>
+
+      <div class="card">
+        <b>⏱️ 長さ・費用・サーバー</b>
+        <details><summary>15秒より長い動画は作れる？</summary>
+          <div class="hint">1回の生成は15秒が上限です。長編は複数本を作って動画編集アプリで連結します。繋ぎ目は「🎬始点→終点」を使い、前のクリップの最後のコマ画像→次のシーンの画像、で作ると自然に繋がります。</div>
+        </details>
+        <details><summary>いくらかかる？</summary>
+          <div class="hint">サーバー起動中のみ課金：約500円/時（混雑時の代替GPUは約690円/時）。動画1本の目安：標準画質5秒で約20円、人物固定・部分編集・エレメント使用は約2〜3倍。⚡高速モードで時間も費用も削減できます。</div>
+        </details>
+        <details><summary>使い終わったら？</summary>
+          <div class="hint"><b>サーバー停止を忘れずに</b>（上部の「■停止」）。「完成後にサーバー自動停止」をONにしておけば自動で止まります。他の人が生成中のときは安全のため止まらない設計です。</div>
+        </details>
+        <details><summary>サーバーが起動しない・GPU満席</summary>
+          <div class="hint">自動で数回再試行し、別のGPUにも切り替えます。それでもダメなら混雑時間帯を避けて30分〜1時間後に再試行してください。</div>
+        </details>
+      </div>
+
+      <div class="card">
+        <b>🧯 トラブル・その他</b>
+        <details><summary>くるくるが止まらない／接続が切れたと出る</summary>
+          <div class="hint">ページを再読み込み（F5）してください。生成の進捗は「ステップ X/20」で表示されます。表示がない時間帯（モデル読み込み・仕上げ処理）も正常です。</div>
+        </details>
+        <details><summary>エラーが出た</summary>
+          <div class="hint">エラーは【動画形式エラー】【入力不足】など分類付きで表示されます。まず分類の指示に従ってください（例：動画形式→MP4に変換）。解決しないときはエラー画面のスクリーンショットを管理者に送ってください。</div>
+        </details>
+        <details><summary>完成した動画はどこにある？</summary>
+          <div class="hint">「🎞️作品」ページで全部見られます。ファイルはツールと同じフォルダの「outputs」にも保存されています。</div>
+        </details>
+        <details><summary>前と同じ雰囲気でもう一度作りたい</summary>
+          <div class="hint">作品ページの「↩️設定を呼び出す」でプロンプト・設定・シード値がまるごと復元されます（画像・動画素材だけ選び直し）。シード値が同じなら似た結果になります。</div>
+        </details>
+      </div>
+    </section>
+
     <!-- ========== 設定 ========== -->
     <section id="view-settings" class="hidden">
       <h2 class="pagetitle">⚙️ 設定</h2>
@@ -629,6 +729,7 @@
     <div class="nav sel" id="bnav_create" onclick="go('create')"><span class="ico">✨</span>作成</div>
     <div class="nav" id="bnav_elements" onclick="go('elements')"><span class="ico">📦</span>エレメント</div>
     <div class="nav" id="bnav_library" onclick="go('library')"><span class="ico">🎞️</span>作品</div>
+    <div class="nav" id="bnav_tips" onclick="go('tips')"><span class="ico">💡</span>コツ</div>
     <div class="nav" id="bnav_settings" onclick="go('settings')"><span class="ico">⚙️</span>設定</div>
   </nav>
 
@@ -650,7 +751,7 @@ function toast(msg) {
 // ---------- 画面切り替え ----------
 function go(v) {
   view = v;
-  ['create', 'elements', 'library', 'settings'].forEach(x => {
+  ['create', 'elements', 'library', 'tips', 'settings'].forEach(x => {
     $('view-' + x).classList.toggle('hidden', x !== v);
     $('nav_' + x).classList.toggle('sel', x === v);
     $('bnav_' + x).classList.toggle('sel', x === v);
