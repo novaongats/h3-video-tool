@@ -17,7 +17,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "2.6.6"
+SELF_VERSION = "2.6.7"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -568,6 +568,11 @@ def run_generation(params, image_blob, image_name):
                                "class_type": "LoadImage", "_meta": {"title": f"参照画像{i + 1}"}}
                 wf["136"]["inputs"][f"ref_images.ref_image_{i}"] = [node_id, 0]
             pics = "、".join(f"<Picture {i + 1}>" for i in range(len(refs[:4])))
+            # ユーザーが「参照画像」「元動画」と書いたら、モデルの正式タグに自動変換して確実に紐付ける
+            if refs:
+                prompt_text = prompt_text.replace("参照画像", pics)
+            if mode == "edit":
+                prompt_text = prompt_text.replace("元の動画", "<Video 1>").replace("元動画", "<Video 1>")
 
         if mode == "r2v":
             prompt_text = (f"参照画像（{pics}）に写っている人物・キャラクターと完全に同一の外見"
