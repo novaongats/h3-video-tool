@@ -18,7 +18,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "3.1.4"
+SELF_VERSION = "3.2.0"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -541,6 +541,122 @@ def compose_prompt(p):
     return "\n\n".join(x for x in parts if x)
 
 
+def plan_generation(params, elements):
+    """参照素材（エレメント・画像・絵コンテ）の解決と最終プロンプトの組み立て。
+    生成本番と「送信内容の確認」プレビューが同じこの関数を通る（＝見た通りのものが送られる保証）。
+    返り値: {"mode": 実際のエンジン, "prompt": 最終プロンプト, "refs": [{"kind","fname","blob"}]}"""
+    import base64
+    mode = params.get("mode", "t2v")
+    storyboard = (params.get("storyboard_images") or [])[:6]
+    if (elements or storyboard) and mode == "t2v":
+        mode = "r2v"  # エレメント・絵コンテは参照対応エンジンで生成
+    prompt_text = compose_prompt(params)
+    refs_out = []
+    if mode in ("r2v", "edit"):
+        manual_refs = (params.get("ref_images") or [])[:4]
+        elem_slots = []
+        for el in elements:
+            idxs = []
+            for fn in el.get("images", [])[:3]:
+                fp = os.path.join(ELEMENTS_DIR, fn)
+                if os.path.exists(fp):
+                    with open(fp, "rb") as f:
+                        refs_out.append({"kind": f"📦エレメント @{el['name']}", "fname": fn, "blob": f.read()})
+                    idxs.append(len(refs_out) - 1)
+            if idxs:
+                elem_slots.append((el, idxs))
+        manual_slots = []
+        for ref in manual_refs:
+            refs_out.append({"kind": "🖼️選択した画像", "fname": ref.get("name") or "ref.png",
+                             "blob": base64.b64decode(ref["b64"])})
+            manual_slots.append(((ref.get("tag") or "").strip().lstrip("@"), len(refs_out) - 1))
+        sb_slots = []
+        if mode == "r2v":
+            for sb in storyboard:
+                refs_out.append({"kind": "🎬絵コンテ", "fname": sb.get("name") or "cut.png",
+                                 "blob": base64.b64decode(sb["b64"])})
+                sb_slots.append(len(refs_out) - 1)
+        if mode == "r2v" and not refs_out:
+            raise RunPodError("【入力不足】参照画像が選択されていません（エレメントを選ぶか、画像を1〜4枚選択）")
+        if len(refs_out) > 8:
+            raise RunPodError(f"【入力過多】参照画像が多すぎます（エレメント含め合計8枚まで。現在{len(refs_out)}枚）。"
+                              "エレメントや画像を減らしてください")
+        pics = "、".join(f"<Picture {i + 1}>" for i in range(len(refs_out)))
+
+        # --- 素材ごとに役割を宣言し、「@名前」で本文から呼べるようにする ---
+        ELEM_ROLE = {"人物": "本文に登場するこの人物の顔・髪型・体型・雰囲気は、この画像と完全に同一にする",
+                     "場所": "シーンの場所・背景として、この画像の場所を正確に再現する",
+                     "物": "この物・衣装を形・色・質感まで正確に再現して登場させる",
+                     "スタイル": "映像全体の画風・色調・質感をこの画像の雰囲気に合わせる"}
+        defs = []
+        tag_map = []
+        for el, idxs in elem_slots:
+            pstr = "、".join(f"<Picture {i + 1}>" for i in idxs)
+            role = ELEM_ROLE.get(el.get("type") or "人物", "この画像を参照素材として使う")
+            memo = f"。補足情報: {el['memo']}" if el.get("memo") else ""
+            defs.append(f"「{el['name']}」（{el.get('type', '人物')}）= {pstr}。{role}{memo}")
+            tag_map.append((el["name"], f"「{el['name']}」"))
+        for t, idx in manual_slots:
+            if t:
+                tag_map.append((t, f"<Picture {idx + 1}>"))
+        if sb_slots:
+            sec = float(params.get("seconds", 5))
+            if len(sb_slots) == 1:
+                # 1枚だけ＝複数コマが並んだ「絵コンテシート」として読み取らせる
+                defs.append(f"絵コンテシート = <Picture {sb_slots[0] + 1}>。このシートには複数のコマが並んでいる。"
+                            "左上から右へ、上の段から下の段の順にコマを読み、その順番どおりのカット構成で"
+                            "動画を作る。各コマの構図・配置・カメラアングルに従う（絵柄・画風はコピーしない）")
+                tag_map.append(("絵コンテ", f"<Picture {sb_slots[0] + 1}>"))
+                prompt_text = ("絵コンテ指定: 上記の絵コンテシートのコマの順番どおりに動画を構成する。"
+                               "本文に時間指定があればそちらを優先する。\n\n" + prompt_text)
+            else:
+                per = max(2, round(sec / len(sb_slots)))
+                for k, idx in enumerate(sb_slots):
+                    defs.append(f"カット{k + 1} = <Picture {idx + 1}>。このカットの構図・カメラアングル・"
+                                f"人物や物の配置はこの絵コンテ画像に従う（絵柄・画風はコピーしない）")
+                    tag_map.append((f"カット{k + 1}", f"<Picture {idx + 1}>"))
+                prompt_text = (f"絵コンテ指定: 動画を{len(sb_slots)}個のカットで順番に構成する。"
+                               f"各カットは約{per}秒。カットの構図は上記の絵コンテ定義に従い、"
+                               "本文に時間指定があればそちらを優先する。\n\n" + prompt_text)
+        if mode == "edit":
+            tag_map += [("元の動画", "<Video 1>"), ("元動画", "<Video 1>")]
+        # @名前 → 正式タグ（ひらがな/カタカナ・大文字小文字の表記ゆれも吸収）
+        prompt_text = replace_at_tags(prompt_text, tag_map)
+        # @なしの「参照画像」「元動画」という普通の言葉も正式タグに自動変換
+        if refs_out:
+            prompt_text = prompt_text.replace("参照画像", pics)
+        if mode == "edit":
+            prompt_text = prompt_text.replace("元の動画", "<Video 1>").replace("元動画", "<Video 1>")
+        if defs:
+            prompt_text = "参照素材の役割定義:\n- " + "\n- ".join(defs) + "\n\n" + prompt_text
+        if mode == "r2v" and not elem_slots and not sb_slots:
+            prompt_text = (f"参照画像（{pics}）に写っている人物・キャラクターと完全に同一の外見"
+                           f"（顔、髪型、体型、服装）を維持して登場させる。\n\n" + prompt_text)
+        if mode == "edit":
+            if refs_out:
+                target = (f"人物の指定された部分だけを{pics}の人物に置き換える。顔立ち・目鼻・輪郭・肌の色は、"
+                          f"クリップの最初から最後まで一貫して{pics}に完全一致させること。"
+                          f"<Video 1>に映っている元の人物の顔は一切残さず、使用しない。"
+                          f"(Replace only the specified parts of the person with the character shown in {pics}. "
+                          f"Match the new face exactly to {pics} throughout the entire clip. "
+                          f"Do not keep or reuse the original person's face from <Video 1>.)")
+            else:
+                target = "変更内容は以下の指示文に正確に従う。"
+            d_edit = (params.get("dialogue") or "").strip()
+            mix_edit = params.get("mix", "auto")
+            if d_edit or mix_edit in ("no_speech", "silent"):
+                voice_rule = ""
+            else:
+                voice_rule = ("音声の規則: <Video 1>の人物が口を動かしている場合は、その口の動きに合わせて"
+                              "自然で意味の通る日本語だけを話させる。中国語・英語・実在しない言語の発話は"
+                              "絶対に禁止。口が動いていない場合は誰も話さず、環境音のみとする。")
+            prompt_text = ("[video editing + attribute transfer] <Video 1>を演技とシーンのマスターとする。"
+                           "動き、カメラワーク、構図、シーンの進行、タイミング、背景、照明はすべて<Video 1>から"
+                           f"継承し、新しい動きを追加しない。{target}{voice_rule}\n\n"
+                           "変更の指示: " + prompt_text)
+    return {"mode": mode, "prompt": prompt_text, "refs": refs_out}
+
+
 def run_generation(params, image_blob, image_name):
     cfg = load_config()
     src_video_path = None  # 部分編集で「元動画の音声を使う」とき、元動画の一時保存先
@@ -552,19 +668,15 @@ def run_generation(params, image_blob, image_name):
             raise RunPodError("【入力不足】画像が選択されていません")
         if mode == "flf2v" and not params.get("last_image_b64"):
             raise RunPodError("【入力不足】「最後の画像」が選択されていません")
-        # ---- エレメント・絵コンテの読み込みとエンジン切替 ----
+        # ---- エレメント・絵コンテの解決と最終プロンプトの組み立て（プレビューと同一コード） ----
         element_ids = params.get("element_ids") or []
         elements = [e for e in load_elements() if e.get("id") in element_ids] if element_ids else []
-        storyboard = (params.get("storyboard_images") or [])[:6]
-        if (elements or storyboard) and mode in ("i2v", "flf2v"):
+        if (elements or (params.get("storyboard_images") or [])) and mode in ("i2v", "flf2v"):
             raise RunPodError("【非対応】「画像を動かす」「始点→終点」はAIの仕様上エレメント・絵コンテを併用できません。"
                               "「文章から」「人物固定」「部分編集」をご利用ください")
-        if (elements or storyboard) and mode == "t2v":
-            # エレメント・絵コンテ使用時は参照対応エンジン（人物固定と同じ）で生成する
-            mode = "r2v"
+        plan = plan_generation(params, elements)
+        mode = plan["mode"]
 
-        if mode == "r2v" and not (params.get("ref_images") or []) and not elements and not storyboard:
-            raise RunPodError("【入力不足】参照画像が選択されていません（エレメントを選ぶか、画像を1〜4枚選択）")
         if mode == "edit":
             if not params.get("ref_video_b64"):
                 raise RunPodError("【入力不足】編集する元動画が選択されていません")
@@ -586,7 +698,7 @@ def run_generation(params, image_blob, image_name):
         if mode in ("r2v", "edit"):
             ids = {"prompt": "138", "dur": "132", "seed": "129", "steps": "124"}
 
-        prompt_text = compose_prompt(params)
+        prompt_text = plan["prompt"]
         wf[ids["dur"]]["inputs"]["value"] = float(params.get("seconds", 5))
         seed_in = str(params.get("seed", "")).strip()
         seed = int(seed_in) if seed_in.isdigit() else random.randint(0, 2**48)
@@ -638,39 +750,10 @@ def run_generation(params, image_blob, image_name):
                     node["inputs"]["model"] = ["300", 0]
 
         if mode in ("r2v", "edit"):
-            import base64
-            manual_refs = (params.get("ref_images") or [])[:4]
-            # エレメントの画像 + その場で選んだ画像 を1つの参照リストに統合する
-            all_refs = []       # [{"fname":…, "blob":…}]
-            elem_slots = []     # (エレメント, [参照リスト上のindex,…])
-            for el in elements:
-                idxs = []
-                for fn in el.get("images", [])[:3]:
-                    fp = os.path.join(ELEMENTS_DIR, fn)
-                    if os.path.exists(fp):
-                        with open(fp, "rb") as f:
-                            all_refs.append({"fname": fn, "blob": f.read()})
-                        idxs.append(len(all_refs) - 1)
-                if idxs:
-                    elem_slots.append((el, idxs))
-            manual_slots = []   # (@名札, 参照リスト上のindex)
-            for ref in manual_refs:
-                all_refs.append({"fname": ref.get("name") or "ref.png", "blob": base64.b64decode(ref["b64"])})
-                manual_slots.append(((ref.get("tag") or "").strip().lstrip("@"), len(all_refs) - 1))
-            sb_slots = []       # 絵コンテ: カット番号順の参照リスト上のindex
-            if mode == "r2v":
-                for sb in storyboard:
-                    all_refs.append({"fname": sb.get("name") or "cut.png", "blob": base64.b64decode(sb["b64"])})
-                    sb_slots.append(len(all_refs) - 1)
-            if mode == "r2v" and not all_refs:
-                raise RunPodError("参照画像が選択されていません（エレメントを選ぶか、画像を1〜4枚選択）")
-            if len(all_refs) > 8:
-                raise RunPodError(f"参照画像が多すぎます（エレメント含め合計8枚まで。現在{len(all_refs)}枚）。"
-                                  "エレメントや画像を減らしてください")
             # 参照画像を縮小せず高解像度のまま渡す（顔の一致度が大きく向上する公式推奨設定）
             wf["136"]["inputs"]["ref_image_size"] = "max"
             set_job(state="uploading", message="参照素材をアップロード中…")
-            for i, ref in enumerate(all_refs):
+            for i, ref in enumerate(plan["refs"]):
                 up = comfy_upload_image(cfg, ref["fname"], ref["blob"])
                 name = up.get("name")
                 sub = up.get("subfolder") or ""
@@ -678,52 +761,9 @@ def run_generation(params, image_blob, image_name):
                 wf[node_id] = {"inputs": {"image": (sub + "/" + name) if sub else name},
                                "class_type": "LoadImage", "_meta": {"title": f"参照画像{i + 1}"}}
                 wf["136"]["inputs"][f"ref_images.ref_image_{i}"] = [node_id, 0]
-            pics = "、".join(f"<Picture {i + 1}>" for i in range(len(all_refs)))
-
-            # --- Seedance流：素材ごとに役割を宣言し、「@名前」で本文から呼べるようにする ---
-            ELEM_ROLE = {"人物": "本文に登場するこの人物の顔・髪型・体型・雰囲気は、この画像と完全に同一にする",
-                         "場所": "シーンの場所・背景として、この画像の場所を正確に再現する",
-                         "物": "この物・衣装を形・色・質感まで正確に再現して登場させる",
-                         "スタイル": "映像全体の画風・色調・質感をこの画像の雰囲気に合わせる"}
-            defs = []
-            tag_map = []
-            for el, idxs in elem_slots:
-                pstr = "、".join(f"<Picture {i + 1}>" for i in idxs)
-                role = ELEM_ROLE.get(el.get("type") or "人物", "この画像を参照素材として使う")
-                memo = f"。補足情報: {el['memo']}" if el.get("memo") else ""
-                defs.append(f"「{el['name']}」（{el.get('type', '人物')}）= {pstr}。{role}{memo}")
-                tag_map.append((el["name"], f"「{el['name']}」"))
-            for t, idx in manual_slots:
-                if t:
-                    tag_map.append((t, f"<Picture {idx + 1}>"))
-            # 絵コンテ: 各カットの構図指定として役割宣言し、@カット1 でも呼べるようにする
-            if sb_slots:
-                sec = float(params.get("seconds", 5))
-                per = max(2, round(sec / len(sb_slots)))
-                for k, idx in enumerate(sb_slots):
-                    defs.append(f"カット{k + 1} = <Picture {idx + 1}>。このカットの構図・カメラアングル・"
-                                f"人物や物の配置はこの絵コンテ画像に従う（絵柄・画風はコピーしない）")
-                    tag_map.append((f"カット{k + 1}", f"<Picture {idx + 1}>"))
-                prompt_text = (f"絵コンテ指定: 動画を{len(sb_slots)}個のカットで順番に構成する。"
-                               f"各カットは約{per}秒。カットの構図は上記の絵コンテ定義に従い、"
-                               "本文に時間指定があればそちらを優先する。\n\n" + prompt_text)
-            if mode == "edit":
-                tag_map += [("元の動画", "<Video 1>"), ("元動画", "<Video 1>")]
-            # @名前 → 正式タグ（ひらがな/カタカナ・大文字小文字の表記ゆれも吸収）
-            prompt_text = replace_at_tags(prompt_text, tag_map)
-            # @なしの「参照画像」「元動画」という普通の言葉も正式タグに自動変換して確実に紐付ける
-            if all_refs:
-                prompt_text = prompt_text.replace("参照画像", pics)
-            if mode == "edit":
-                prompt_text = prompt_text.replace("元の動画", "<Video 1>").replace("元動画", "<Video 1>")
-            if defs:
-                prompt_text = "参照素材の役割定義:\n- " + "\n- ".join(defs) + "\n\n" + prompt_text
-
-        if mode == "r2v" and not elem_slots and not sb_slots:
-            prompt_text = (f"参照画像（{pics}）に写っている人物・キャラクターと完全に同一の外見"
-                           f"（顔、髪型、体型、服装）を維持して登場させる。\n\n" + prompt_text)
 
         if mode == "edit":
+            import base64
             ref_video_b64 = params.get("ref_video_b64")
             if not ref_video_b64:
                 raise RunPodError("編集する元動画が選択されていません")
@@ -744,29 +784,6 @@ def run_generation(params, image_blob, image_name):
             wf["211"] = {"inputs": {"video": ["210", 0]},
                          "class_type": "GetVideoComponents", "_meta": {"title": "動画をコマに分解"}}
             wf["136"]["inputs"]["ref_videos.ref_video_0"] = ["211", 0]
-            if all_refs:
-                target = (f"人物の指定された部分だけを{pics}の人物に置き換える。顔立ち・目鼻・輪郭・肌の色は、"
-                          f"クリップの最初から最後まで一貫して{pics}に完全一致させること。"
-                          f"<Video 1>に映っている元の人物の顔は一切残さず、使用しない。"
-                          f"(Replace only the specified parts of the person with the character shown in {pics}. "
-                          f"Match the new face exactly to {pics} throughout the entire clip. "
-                          f"Do not keep or reuse the original person's face from <Video 1>.)")
-            else:
-                target = "変更内容は以下の指示文に正確に従う。"
-            # 元動画で口が動いていると、AIが意味不明な言語の音声を後付けしてしまう対策。
-            # セリフ指定があればそれを、「セリフなし」指定なら無音を、どちらも無ければ自然な日本語を優先させる
-            d_edit = (params.get("dialogue") or "").strip()
-            mix_edit = params.get("mix", "auto")
-            if d_edit or mix_edit in ("no_speech", "silent"):
-                voice_rule = ""
-            else:
-                voice_rule = ("音声の規則: <Video 1>の人物が口を動かしている場合は、その口の動きに合わせて"
-                              "自然で意味の通る日本語だけを話させる。中国語・英語・実在しない言語の発話は"
-                              "絶対に禁止。口が動いていない場合は誰も話さず、環境音のみとする。")
-            prompt_text = ("[video editing + attribute transfer] <Video 1>を演技とシーンのマスターとする。"
-                           "動き、カメラワーク、構図、シーンの進行、タイミング、背景、照明はすべて<Video 1>から"
-                           f"継承し、新しい動きを追加しない。{target}{voice_rule}\n\n"
-                           "変更の指示: " + prompt_text)
 
         wf[ids["prompt"]]["inputs"]["prompt" if mode not in ("r2v", "edit") else "value"] = prompt_text
 
@@ -921,6 +938,7 @@ def run_generation(params, image_blob, image_name):
             "keep_audio": bool(params.get("keep_audio")),
             "elements": [e.get("name") for e in elements],
             "element_ids": element_ids,
+            "final_prompt": prompt_text,
         })
         set_job(state="done", message="完成！" + audio_note, video=local_name, error=None)
     except RunPodError as e:
@@ -1166,6 +1184,25 @@ class Handler(BaseHTTPRequestHandler):
                         keep.append(x)
                 save_elements(keep)
                 self._send(200, {"ok": True, "elements": keep})
+            elif path == "/api/preview":
+                # 送信内容の確認: 生成本番と同じplan_generation()を通して最終プロンプトを返す（課金なし）
+                data = json.loads(raw)
+                eids = data.get("element_ids") or []
+                elems = [e for e in load_elements() if e.get("id") in eids] if eids else []
+                if (elems or (data.get("storyboard_images") or [])) and data.get("mode") in ("i2v", "flf2v"):
+                    self._send(400, {"error": "このモードはエレメント・絵コンテを併用できません"})
+                    return
+                try:
+                    plan = plan_generation(data, elems)
+                except RunPodError as e:
+                    self._send(400, {"error": str(e)})
+                    return
+                mode_label = {"t2v": "📝文章から", "i2v": "🖼️画像を動かす", "flf2v": "🎬始点→終点",
+                              "r2v": "👤参照エンジン（人物固定と同じ）", "edit": "✂️部分編集"}
+                self._send(200, {"mode": plan["mode"], "mode_label": mode_label.get(plan["mode"], plan["mode"]),
+                                 "prompt": plan["prompt"],
+                                 "refs": [{"no": i + 1, "kind": r["kind"], "fname": r["fname"]}
+                                          for i, r in enumerate(plan["refs"])]})
             elif path == "/api/generate":
                 if JOB["state"] in ("starting_pod", "waiting_comfy", "uploading", "generating", "downloading", "stopping_pod"):
                     self._send(409, {"error": "生成が進行中です"})

@@ -512,12 +512,24 @@
         </details>
 
         <div style="grid-column:1/-1">
+          <button style="width:100%;margin-bottom:8px;font-size:13px" onclick="previewPrompt()">🔍 送信内容を確認（何がAIに送られるか見る）</button>
           <button class="btn-main" id="btnGen" onclick="generate()">🚀 動画を生成する</button>
           <div class="hint" id="costText" style="text-align:center"></div>
         </div>
       </div>
 
       <div class="cfoot">
+
+      <div class="card hidden" id="previewCard" style="margin-top:14px;border-color:rgba(56,200,245,.4)">
+        <div class="row" style="justify-content:space-between">
+          <b style="color:var(--ac2)">🔍 送信内容の確認</b>
+          <button style="padding:5px 12px;font-size:12px" onclick="$('previewCard').classList.add('hidden')">✕ 閉じる</button>
+        </div>
+        <div class="hint" id="pvMode" style="margin-top:8px"></div>
+        <div class="hint" id="pvRefs"></div>
+        <label class="lbl">AIに送られる最終プロンプト全文：</label>
+        <pre id="pvPrompt" style="white-space:pre-wrap;font-size:12px;line-height:1.7;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:12px;max-height:320px;overflow-y:auto;font-family:inherit"></pre>
+      </div>
 
       <!-- 進捗・結果・エラー -->
       <div class="card hidden" id="progCard" style="margin-top:14px">
@@ -600,6 +612,9 @@
         <details><summary>何文字くらい書けばいい？</summary>
           <div class="hint"><b>細かく指定するほど品質が上がります。</b>本気の作り込みは【見出し】・時間区切り・カメラ指定で構造化した<b>数千字レベル</b>が世界の上級者の標準です（実例：4,500字のプロンプトで13秒動画）。150〜800字は「サッと作るラフ生成」の目安であって上限ではありません。大事なのは文字数ではなく<b>構造と一貫性</b>——唯一NGなのは、構造化せずダラダラ書いた長文（後半が無視されます）。</div>
         </details>
+        <details><summary>⚠️ 名詞のリスト（道路、電車、海、虹…）を書いたら関係ない映像が出てきた</summary>
+          <div class="hint">AIは<b>名詞の羅列を「映すべき内容のリスト」として解釈</b>します。「実写にするもの一覧」のつもりで「道路、駅、電車、海、湖、虹…」と並べると、本当に道路や虹の映像が生成されてしまいます。スタイルの指定は「全体を実写のシネマティックな映像にする。主人公だけ2Dアニメ調」のように<b>短い文章</b>で書き、映したくないものは列挙せず、映したいシーンだけを具体的に描写してください。生成前に<b>「🔍送信内容を確認」ボタン</b>で最終文を必ずチェックするのがおすすめです。</div>
+        </details>
         <details><summary>クオリティを上げる書き方のコツは？</summary>
           <div class="hint">①冒頭でスタイル宣言（例：実写のシネマティックな映像、夕暮れの光）②時間で区切る（例：[3秒-] 猫が立ち止まる）③カメラを指定（寄る・引く・パン）④「〜しない」の禁止事項も書く。<b>迷ったらプロンプト欄右上の「🤖GPTsで作る」</b>が楽です。質問に答えるだけでプロ級の設定一式ができて、「📋貼り付け」で全項目が自動入力されます。</div>
         </details>
@@ -643,7 +658,10 @@
       <div class="card">
         <b>🎬 絵コンテ・部分編集</b>
         <details><summary>絵コンテから作りたい</summary>
-          <div class="hint">作成画面の「🎬絵コンテ」にカット順で画像を2〜6枚選択。ラフな手描きでもOK（構図・配置・アングルだけが使われ、絵柄はコピーされません）。<b>長さはカット数×3〜4秒</b>、本文に「カット1では〜、カット2では〜」と書くと精度最強です。</div>
+          <div class="hint">作成画面の「🎬絵コンテ」に<b>1コマ＝1枚</b>でカット順に2〜6枚選択（コマが並んだコンテシートなら1枚だけでもOK：コマ順に読み取られます）。ラフな手描きでもOK（構図・配置・アングルだけが使われます）。<b>長さはカット数×3〜4秒</b>、本文に「カット1では〜、カット2では〜」と書くと精度最強です。⚠️<b>服や小物の写真を絵コンテ欄に入れないでください</b>——それは「カットの構図」として誤解釈されます。服・物はエレメント（🧥物）に登録して@名前で指定します。</div>
+        </details>
+        <details><summary>生成前に「何が送られるか」を確かめたい</summary>
+          <div class="hint">生成ボタンの上の<b>「🔍 送信内容を確認」</b>を押すと、AIに送られる最終プロンプト全文と、参照画像の割り当て（&lt;Picture 1&gt;=どの画像か）が表示されます（無料）。思い通りにならないときは、まずここを見ると原因が分かります。過去の生成も、作品ページの「🧾実際にAIへ送られた全文」で確認できます。</div>
         </details>
         <details><summary>動画の顔だけ差し替えたい</summary>
           <div class="hint">✂️部分編集で元動画＋顔の参照画像（またはエレメント）を選び、「@元動画の人物の顔だけを@名前の顔に置き換える。他は一切変えない」。声を元のまま残す「🔊元動画の音声をそのまま使う」は最初からONです。</div>
@@ -805,8 +823,10 @@ function clearSb() { sbImages = []; $('sbPreview').innerHTML = ''; $('sbFiles').
 function updateSbHint() {
   const n = sbImages.length;
   $('sbHint').textContent = n === 0
-    ? 'ラフな手描きでもOK。絵柄はコピーされず「構図・配置・アングル」だけが使われます。プロンプトには「カット1では〜」とカットごとの内容を書くと最強です（@カット1 でも指定可）。'
-    : '🎬 ' + n + 'カット構成 → おすすめの長さ: ' + Math.min(15, n * 3) + '〜' + Math.min(15, n * 4) + '秒（長さスライダーで調整）。プロンプトにカットごとの内容（カット1では〜）を書くと精度が上がります。';
+    ? '1コマ＝1枚で複数選ぶのが基本。コマが並んだ「コンテシート」なら1枚だけ選べばコマ順に読み取ります。⚠️服や物の写真はここではなくエレメント（🧥物）に登録してください。'
+    : n === 1
+    ? '🎬 コンテシートモード：この1枚に並んだコマを左上→右下の順に読み取って構成します。1コマ＝1枚で分けるとさらに精度が上がります。'
+    : '🎬 ' + n + 'カット構成 → おすすめの長さ: ' + Math.min(15, n * 3) + '〜' + Math.min(15, n * 4) + '秒。プロンプトに「カット1では〜」とカットごとの内容を書くと精度が上がります。';
 }
 
 // ---------- @入力補完（エレメント名のオートコンプリート） ----------
@@ -1217,36 +1237,57 @@ async function podStart() { $('btnStart').disabled = true; try { await api('/api
 async function podStop() { $('btnStop').disabled = true; try { await api('/api/stop', { method: 'POST' }); } catch (e) { alert(e.message); } }
 
 // ---------- 生成 ----------
+function buildPayload() {
+  return {
+    mode, prompt: $('prompt').value.trim(), seconds: +$('seconds').value, aspect,
+    auto_stop: $('autoStop').checked,
+    image_b64: mode === 'i2v' ? imgB64 : mode === 'flf2v' ? flfFirstB64 : null,
+    image_name: mode === 'flf2v' ? flfFirstName : imgName,
+    last_image_b64: mode === 'flf2v' ? flfLastB64 : null,
+    last_image_name: flfLastName,
+    ref_images: mode === 'r2v' ? refImages : mode === 'edit' ? editImages : null,
+    ref_video_b64: mode === 'edit' ? refVideoB64 : null,
+    ref_video_name: refVideoName,
+    keep_audio: mode === 'edit' ? $('keepAudio').checked : false,
+    element_ids: elemUsable() ? [...selElems] : [],
+    storyboard_images: (mode === 't2v' || mode === 'r2v') ? sbImages : null,
+    fast_mode: $('fastMode').checked,
+    dialogue: $('dialogue').value, voice: $('voice').value,
+    bgm: $('bgm').value, se: $('se').value, mix: $('mix').value,
+    quality_mp: $('qualityMp').value, steps: $('steps').value,
+    seed: $('seed').value, no_text: $('noText').checked,
+  };
+}
+
+function validateInputs() {
+  if (!$('prompt').value.trim()) { alert('動画の内容を入力してください'); return false; }
+  if (mode === 'i2v' && !imgB64) { alert('画像を選択してください'); return false; }
+  if (mode === 'flf2v' && (!flfFirstB64 || !flfLastB64)) { alert('最初と最後の画像を両方選択してください'); return false; }
+  if (mode === 'r2v' && refImages.length === 0 && selElems.size === 0) { alert('エレメントを選ぶか、参照画像を選択してください'); return false; }
+  if (mode === 'edit' && !refVideoB64) { alert('編集する元動画を選択してください'); return false; }
+  return true;
+}
+
+async function previewPrompt() {
+  if (!validateInputs()) return;
+  try {
+    const r = await api('/api/preview', { method: 'POST', body: JSON.stringify(buildPayload()) });
+    $('pvMode').innerHTML = '使用エンジン：<b>' + r.mode_label + '</b>' + (r.mode === 'r2v' && mode === 't2v' ? '（エレメント・絵コンテ使用のため自動切替）' : '');
+    $('pvRefs').innerHTML = r.refs.length === 0 ? '参照画像：なし'
+      : '参照画像の割り当て：<br>' + r.refs.map(x => '&lt;Picture ' + x.no + '&gt; ← ' + x.kind + '（' + x.fname + '）').join('<br>');
+    $('pvPrompt').textContent = r.prompt;
+    $('previewCard').classList.remove('hidden');
+    $('previewCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (e) { alert(e.message); }
+}
+
 async function generate() {
   if (generating) return;
-  const prompt = $('prompt').value.trim();
-  if (!prompt) { alert('動画の内容を入力してください'); return; }
-  if (mode === 'i2v' && !imgB64) { alert('画像を選択してください'); return; }
-  if (mode === 'flf2v' && (!flfFirstB64 || !flfLastB64)) { alert('最初と最後の画像を両方選択してください'); return; }
-  if (mode === 'r2v' && refImages.length === 0 && selElems.size === 0) { alert('エレメントを選ぶか、参照画像を選択してください'); return; }
-  if (mode === 'edit' && !refVideoB64) { alert('編集する元動画を選択してください'); return; }
+  if (!validateInputs()) return;
   $('doneCard').classList.add('hidden');
   $('errCard').classList.add('hidden');
   try {
-    await api('/api/generate', { method: 'POST', body: JSON.stringify({
-      mode, prompt, seconds: +$('seconds').value, aspect,
-      auto_stop: $('autoStop').checked,
-      image_b64: mode === 'i2v' ? imgB64 : mode === 'flf2v' ? flfFirstB64 : null,
-      image_name: mode === 'flf2v' ? flfFirstName : imgName,
-      last_image_b64: mode === 'flf2v' ? flfLastB64 : null,
-      last_image_name: flfLastName,
-      ref_images: mode === 'r2v' ? refImages : mode === 'edit' ? editImages : null,
-      ref_video_b64: mode === 'edit' ? refVideoB64 : null,
-      ref_video_name: refVideoName,
-      keep_audio: mode === 'edit' ? $('keepAudio').checked : false,
-      element_ids: elemUsable() ? [...selElems] : [],
-      storyboard_images: (mode === 't2v' || mode === 'r2v') ? sbImages : null,
-      fast_mode: $('fastMode').checked,
-      dialogue: $('dialogue').value, voice: $('voice').value,
-      bgm: $('bgm').value, se: $('se').value, mix: $('mix').value,
-      quality_mp: $('qualityMp').value, steps: $('steps').value,
-      seed: $('seed').value, no_text: $('noText').checked,
-    })});
+    await api('/api/generate', { method: 'POST', body: JSON.stringify(buildPayload()) });
     generating = true;
   } catch (e) { alert(e.message); }
 }
@@ -1330,6 +1371,8 @@ async function refreshGallery() {
           </div>
           <div class="hprompt" id="hp${i}">${(e.prompt || '').replace(/</g, '&lt;')}</div>
           <a href="javascript:void(0)" style="font-size:11.5px" onclick="$('hp${i}').style.maxHeight = $('hp${i}').style.maxHeight ? '' : '63px'">全文を表示／たたむ</a>
+          ${e.final_prompt ? `<a href="javascript:void(0)" style="font-size:11.5px;margin-left:10px" onclick="$('hf${i}').classList.toggle('hidden')">🧾 実際にAIへ送られた全文</a>
+          <pre id="hf${i}" class="hidden" style="white-space:pre-wrap;font-size:11px;line-height:1.6;background:var(--field);border:1px solid var(--line);border-radius:8px;padding:10px;max-height:220px;overflow-y:auto;font-family:inherit;margin-top:6px">${(e.final_prompt || '').replace(/</g, '&lt;')}</pre>` : ''}
           <div class="row" style="margin-top:8px">
             <button style="font-size:12px;padding:7px 12px" onclick="copyPrompt(${i}, this)">📋 コピー</button>
             <button style="font-size:12px;padding:7px 12px" onclick="restoreEntry(${i})">↩️ 設定を呼び出す</button>
