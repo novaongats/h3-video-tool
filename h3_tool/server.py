@@ -18,7 +18,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "3.2.0"
+SELF_VERSION = "3.3.0"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -657,6 +657,51 @@ def plan_generation(params, elements):
     return {"mode": mode, "prompt": prompt_text, "refs": refs_out}
 
 
+def save_report(params, plan, elements, seed, video, error):
+    """1回の生成の全情報（設定・最終プロンプト・参照画像の実物）を1つのZIPに保存する。
+    うまく生成できないとき、このZIP＋動画を送ってもらうだけで完全な分析ができる。"""
+    import zipfile
+    name = "report_" + time.strftime("%Y%m%d_%H%M%S") + ".zip"
+    path = os.path.join(OUTPUT_DIR, name)
+    L = []
+    L.append("===== H3 Studio 生成レポート =====")
+    L.append(f"日時: {time.strftime('%Y-%m-%d %H:%M:%S')} / ツール: v{SELF_VERSION}")
+    L.append(f"選択モード: {params.get('mode')} → 実際のエンジン: {plan['mode']}")
+    L.append(f"結果: {('完成 ' + video) if video else '未完成（エラー）'}")
+    if error:
+        L.append(f"エラー内容: {error}")
+    L.append(f"長さ: {params.get('seconds')}秒 / 画面: {params.get('aspect')} / 画質: {params.get('quality_mp')}"
+             f" / ステップ: {params.get('steps')} / 高速: {'ON' if params.get('fast_mode') else 'OFF'} / シード: {seed}")
+    if params.get("mode") == "edit":
+        L.append(f"元動画: {params.get('ref_video_name')} / 元動画の音声を使う: {'ON' if params.get('keep_audio') else 'OFF'}")
+    if elements:
+        L.append("使用エレメント:")
+        for e in elements:
+            L.append(f"  - @{e['name']}（{e.get('type')}）画像{len(e.get('images', []))}枚"
+                     f" / メモ: {e.get('memo') or 'なし'}")
+    if plan["refs"]:
+        L.append("参照画像の割り当て（画像の実物はこのZIP内に同梱）:")
+        for i, r in enumerate(plan["refs"]):
+            L.append(f"  <Picture {i + 1}> = {r['kind']}（{r['fname']}）")
+    L.append("")
+    L.append("----- ユーザーが入力したプロンプト -----")
+    L.append(params.get("prompt") or "")
+    for k, label in (("dialogue", "セリフ"), ("voice", "声の感じ"), ("bgm", "BGM"),
+                     ("se", "効果音"), ("mix", "音バランス")):
+        v = str(params.get(k) or "").strip()
+        if v and v != "auto":
+            L.append(f"{label}: {v}")
+    L.append("")
+    L.append("----- 実際にAIへ送られた最終プロンプト全文 -----")
+    L.append(plan["prompt"])
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("report.txt", "﻿" + "\n".join(L))  # BOM付き=Windowsのメモ帳で文字化けしない
+        for i, r in enumerate(plan["refs"]):
+            ext = os.path.splitext(r["fname"])[1].lower() or ".png"
+            z.writestr(f"Picture{i + 1}{ext}", r["blob"])
+    return name
+
+
 def run_generation(params, image_blob, image_name):
     cfg = load_config()
     src_video_path = None  # 部分編集で「元動画の音声を使う」とき、元動画の一時保存先
@@ -919,6 +964,10 @@ def run_generation(params, image_blob, image_name):
                 except Exception:
                     pass
 
+        try:
+            report_name = save_report(params, plan, elements, seed, local_name, None)
+        except Exception:
+            report_name = None
         append_history({
             "time": time.strftime("%Y-%m-%d %H:%M"),
             "video": local_name,
@@ -939,8 +988,9 @@ def run_generation(params, image_blob, image_name):
             "elements": [e.get("name") for e in elements],
             "element_ids": element_ids,
             "final_prompt": prompt_text,
+            "report": report_name,
         })
-        set_job(state="done", message="完成！" + audio_note, video=local_name, error=None)
+        set_job(state="done", message="完成！" + audio_note, video=local_name, error=None, report=report_name)
     except RunPodError as e:
         set_job(state="error", message="", error=str(e))
     except urllib.error.HTTPError as e:
@@ -954,6 +1004,14 @@ def run_generation(params, image_blob, image_name):
     except Exception as e:
         set_job(state="error", message="", error=f"【不明なエラー】{type(e).__name__}: {e}")
     finally:
+        # エラーで終わった場合も、原因分析用の診断ファイルを残す（プロンプト組み立てまで到達していた場合）
+        if JOB.get("state") == "error" and "plan" in locals():
+            try:
+                rn = save_report(params, locals()["plan"], locals().get("elements") or [],
+                                 locals().get("seed"), None, JOB.get("error"))
+                set_job(report=rn)
+            except Exception:
+                pass
         if src_video_path and os.path.exists(src_video_path):
             try:
                 os.remove(src_video_path)
@@ -1029,11 +1087,12 @@ class Handler(BaseHTTPRequestHandler):
             files = sorted((f for f in os.listdir(OUTPUT_DIR) if f.lower().endswith(".mp4")), reverse=True)
             self._send(200, {"videos": files[:30]})
         elif path.startswith("/videos/"):
-            name = os.path.basename(path[len("/videos/"):])
+            name = os.path.basename(urllib.parse.unquote(path[len("/videos/"):]))
             fp = os.path.join(OUTPUT_DIR, name)
-            if os.path.exists(fp):
+            if os.path.exists(fp) and name.lower().endswith((".mp4", ".zip")):
+                ctype = "application/zip" if name.lower().endswith(".zip") else "video/mp4"
                 with open(fp, "rb") as f:
-                    self._send(200, f.read(), "video/mp4")
+                    self._send(200, f.read(), ctype)
             else:
                 self._send(404, {"error": "not found"})
         else:
@@ -1215,7 +1274,7 @@ class Handler(BaseHTTPRequestHandler):
                 if data.get("image_b64"):
                     import base64
                     image_blob = base64.b64decode(data["image_b64"])
-                set_job(state="starting_pod", message="準備中…", started_at=time.time(), video=None, error=None)
+                set_job(state="starting_pod", message="準備中…", started_at=time.time(), video=None, error=None, report=None)
                 threading.Thread(target=run_generation, args=(data, image_blob, image_name), daemon=True).start()
                 self._send(200, {"ok": True})
             else:

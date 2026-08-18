@@ -545,6 +545,7 @@
         <b style="color:var(--ok)">✅ 完成しました</b>
         <video id="result" controls autoplay loop style="margin-top:10px"></video>
         <div class="hint" id="seedInfo"></div>
+        <div class="hint" id="doneReport"></div>
         <div class="hint">outputsフォルダにも保存済み。右クリック→保存もできます。</div>
       </div>
 
@@ -554,6 +555,7 @@
           <button style="padding:5px 12px;font-size:12px" onclick="clearError()">✕ 閉じる</button>
         </div>
         <div class="err" id="errMsg"></div>
+        <div class="hint" id="errReport"></div>
         <div class="hint">GPU満席の場合は時間をおいて再試行。繰り返す場合はこの画面を管理者へ。</div>
       </div>
       </div>
@@ -691,6 +693,9 @@
         <b>🧯 トラブル・その他</b>
         <details><summary>くるくるが止まらない／接続が切れたと出る</summary>
           <div class="hint">ページを再読み込み（F5）してください。生成の進捗は「ステップ X/20」で表示されます。表示がない時間帯（モデル読み込み・仕上げ処理）も正常です。</div>
+        </details>
+        <details><summary>思い通りの動画にならない・改善を相談したい</summary>
+          <div class="hint">生成のたびに<b>🩺診断ファイル</b>（設定・プロンプト・参照画像が全部入ったZIP）が自動保存されます。完成画面・エラー画面・作品ページのボタンから保存して、<b>そのZIPと動画の2つを管理者へ送るだけ</b>で詳しい分析・改善ができます。プロンプトのコピペや設定の説明は不要です。</div>
         </details>
         <details><summary>エラーが出た</summary>
           <div class="hint">エラーは【動画形式エラー】【入力不足】など分類付きで表示されます。まず分類の指示に従ってください（例：動画形式→MP4に変換）。解決しないときはエラー画面のスクリーンショットを管理者に送ってください。</div>
@@ -1334,6 +1339,7 @@ async function poll() {
     if (job.state === 'done' && job.video) {
       $('doneCard').classList.remove('hidden');
       if (job.seed) $('seedInfo').textContent = 'シード値: ' + job.seed + '（こだわり設定に入れると似た結果を再現）';
+      $('doneReport').innerHTML = job.report ? '📋 思い通りでない場合：<a href="/videos/' + encodeURIComponent(job.report) + '" download>診断ファイルを保存</a>して、動画と一緒に管理者へ送ると詳しく分析できます' : '';
       const v = $('result');
       const src = '/videos/' + encodeURIComponent(job.video);
       if (!v.src.endsWith(encodeURIComponent(job.video))) { v.src = src; refreshGallery(); }
@@ -1341,6 +1347,7 @@ async function poll() {
     if (job.state === 'error' && job.error) {
       $('errCard').classList.remove('hidden');
       $('errMsg').textContent = job.error;
+      $('errReport').innerHTML = job.report ? '📋 <a href="/videos/' + encodeURIComponent(job.report) + '" download>診断ファイルを保存</a>して管理者へ送ると原因を特定できます' : '';
     }
     pollFails = 0;
   } catch (e) {
@@ -1376,6 +1383,7 @@ async function refreshGallery() {
           <div class="row" style="margin-top:8px">
             <button style="font-size:12px;padding:7px 12px" onclick="copyPrompt(${i}, this)">📋 コピー</button>
             <button style="font-size:12px;padding:7px 12px" onclick="restoreEntry(${i})">↩️ 設定を呼び出す</button>
+            ${e.report ? `<a href="/videos/${encodeURIComponent(e.report)}" download><button style="font-size:12px;padding:7px 12px">🩺 診断ファイル</button></a>` : ''}
           </div>
         </div>
       </div>`).join('') || '<div class="hint">まだ作品がありません。「✨作成」から最初の動画を作りましょう。</div>';
