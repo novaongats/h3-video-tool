@@ -18,7 +18,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "3.3.0"
+SELF_VERSION = "3.3.1"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -595,7 +595,9 @@ def plan_generation(params, elements):
             role = ELEM_ROLE.get(el.get("type") or "人物", "この画像を参照素材として使う")
             memo = f"。補足情報: {el['memo']}" if el.get("memo") else ""
             defs.append(f"「{el['name']}」（{el.get('type', '人物')}）= {pstr}。{role}{memo}")
-            tag_map.append((el["name"], f"「{el['name']}」"))
+            # 本文中の言及には毎回タグを併記する（AIはラベル付き画像と本文をテキストで結びつけるため、
+            # 名前だけの間接参照より <Picture N> の直接言及のほうが確実に効く）
+            tag_map.append((el["name"], f"「{el['name']}」(<Picture {idxs[0] + 1}>)"))
         for t, idx in manual_slots:
             if t:
                 tag_map.append((t, f"<Picture {idx + 1}>"))
