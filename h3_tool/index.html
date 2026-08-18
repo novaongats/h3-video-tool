@@ -715,7 +715,7 @@
     <!-- ========== 設定 ========== -->
     <section id="view-settings" class="hidden">
       <h2 class="pagetitle">⚙️ 設定</h2>
-      <div class="pagedesc"></div>
+      <div class="pagedesc" id="setVer" style="font-size:14px"></div>
 
       <div class="card" id="setup">
         <b>RunPod APIキー</b>
@@ -1431,7 +1431,7 @@ function restoreEntry(i) {
   try {
     const c = await api('/api/config');
     hasKey = c.has_key;
-    if (c.version) $('verTag').textContent = 'v' + c.version;
+    if (c.version) { $('verTag').textContent = 'v' + c.version; $('setVer').textContent = '現在のバージョン: v' + c.version + '（最新版は起動時に自動適用されます）'; }
     $('autoStop').checked = c.auto_stop !== false;
     if (!hasKey) go('settings');
   } catch (e) { go('settings'); }
