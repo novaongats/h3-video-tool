@@ -1,5 +1,5 @@
 {
-  "version": "3.3.4",
+  "version": "3.4.0",
   "files": [
     "h3_tool/server.py",
     "h3_tool/index.html",

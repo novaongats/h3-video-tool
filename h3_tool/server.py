@@ -18,7 +18,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "3.3.4"
+SELF_VERSION = "3.4.0"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -289,6 +289,9 @@ def friendly_comfy_error(e):
             msgs.append("【画像エラー】画像を読み込めませんでした。JPG/PNG形式で再選択してください")
         elif ct == "ResolutionSelector":
             msgs.append(f"【画面サイズエラー】画面の形の指定に問題があります（{raw}）")
+        elif ct == "MiniMaxH3PDDAccApply":
+            msgs.append("【超高速モードエラー】超高速モードの準備ができていません。"
+                        "⚡⚡超高速モードをOFFにして生成してください（他の機能には影響しません）")
         else:
             msgs.append(f"【設定エラー】{ct}: {raw}")
     if not msgs:
@@ -672,8 +675,9 @@ def save_report(params, plan, elements, seed, video, error):
     L.append(f"結果: {('完成 ' + video) if video else '未完成（エラー）'}")
     if error:
         L.append(f"エラー内容: {error}")
+    fast_label = "超高速PDD(8step)" if params.get("turbo_mode") else ("EasyCache" if params.get("fast_mode") else "OFF")
     L.append(f"長さ: {params.get('seconds')}秒 / 画面: {params.get('aspect')} / 画質: {params.get('quality_mp')}"
-             f" / ステップ: {params.get('steps')} / 高速: {'ON' if params.get('fast_mode') else 'OFF'} / シード: {seed}")
+             f" / ステップ: {params.get('steps')} / 高速: {fast_label} / シード: {seed}")
     if params.get("mode") == "edit":
         L.append(f"元動画: {params.get('ref_video_name')} / 元動画の音声を使う: {'ON' if params.get('keep_audio') else 'OFF'}")
     if elements:
@@ -783,7 +787,23 @@ def run_generation(params, image_blob, image_name):
                          "class_type": "LoadImage", "_meta": {"title": "最後の画像"}}
             wf["105:104"]["inputs"]["last_frame"] = ["116", 0]
 
-        if params.get("fast_mode"):
+        if params.get("turbo_mode"):
+            # ⚡⚡超高速: 公式蒸留アダプタ(PDD)で8ステップ生成。
+            # レシピ厳守: euler / CFG1(BasicGuider) / シグマはApplyノード出力 / EasyCache併用禁止
+            unet_id = "127" if mode in ("r2v", "edit") else "105:6"
+            pdd_file = ("minimax_h3_ref2va_pdd_acc_8step_comfyui.safetensors" if mode in ("r2v", "edit")
+                        else "minimax_h3_fl2va_pdd_acc_8step_comfyui.safetensors")
+            wf["310"] = {"inputs": {"model": [unet_id, 0], "pdd_file": pdd_file, "nfe": "8",
+                                    "lora_strength": 1.0, "head_strength": 1.0,
+                                    "on_off_grid": "error", "enabled": True},
+                         "class_type": "MiniMaxH3PDDAccApply", "_meta": {"title": "超高速化(PDD 8step)"}}
+            guider_id = "126" if mode in ("r2v", "edit") else "105:16"
+            sca_id = "125" if mode in ("r2v", "edit") else "105:14"
+            ksel_id = "123" if mode in ("r2v", "edit") else "105:17"
+            wf[guider_id]["inputs"]["model"] = ["310", 0]
+            wf[sca_id]["inputs"]["sigmas"] = ["310", 1]
+            wf[ksel_id]["inputs"]["sampler_name"] = "euler"
+        elif params.get("fast_mode"):
             # EasyCache高速化ノードをモデルの直後に差し込む
             unet_id = "127" if mode in ("r2v", "edit") else "105:6"
             wf["300"] = {"inputs": {"model": [unet_id, 0], "reuse_threshold": 0.2,
@@ -986,6 +1006,7 @@ def run_generation(params, image_blob, image_name):
             "quality_mp": params.get("quality_mp", "0.4"),
             "steps": params.get("steps", "20"),
             "fast": bool(params.get("fast_mode")),
+            "turbo": bool(params.get("turbo_mode")),
             "keep_audio": bool(params.get("keep_audio")),
             "elements": [e.get("name") for e in elements],
             "element_ids": element_ids,

@@ -454,6 +454,7 @@
 
         <div class="row" style="margin-top:8px;gap:20px">
           <label class="sw"><input type="checkbox" id="fastMode" checked><span class="tr"></span><span>⚡ 高速モード<br><small>1.5〜2倍速・費用も削減</small></span></label>
+          <label class="sw"><input type="checkbox" id="turboMode"><span class="tr"></span><span>⚡⚡ 超高速モード<br><small>実測2.8倍速（5秒動画が約1.5分）。音がやや小さめ</small></span></label>
           <label class="sw"><input type="checkbox" id="autoStop" checked><span class="tr"></span><span>完成後にサーバー自動停止<br><small>課金ストップ（推奨）</small></span></label>
         </div>
 
@@ -686,6 +687,13 @@
         <b>⏱️ 長さ・費用・サーバー</b>
         <details><summary>15秒より長い動画は作れる？</summary>
           <div class="hint">1回の生成は15秒が上限です。長編は複数本を作って動画編集アプリで連結します。繋ぎ目は「🎬始点→終点」を使い、前のクリップの最後のコマ画像→次のシーンの画像、で作ると自然に繋がります。</div>
+        </details>
+        <details><summary>⚡高速モードと⚡⚡超高速モードの違いは？</summary>
+          <div class="hint"><b>⚡高速</b>＝計算を一部省略して1.5〜2倍速（ふだん使い・初期ON）。<b>⚡⚡超高速</b>＝公式の高速化技術で8ステップ生成、<b>実測2.8倍速</b>（5秒動画が4.5分→1.5分、費用も約1/3）。<br>
+          超高速の注意：桜や光などの<b>細部・彩度がやや控えめ</b>になり、<b>環境音が小さめ</b>になります。用途で使い分けを：<br>
+          ・アイデア出し・大量に試す → ⚡⚡超高速<br>
+          ・本番の仕上げ1本 → 両方OFF＋画質「最高」＋仕上げ「ていねい」<br>
+          ※2つは同時ONできません（どちらかを選ぶと自動で他方がOFF）。</div>
         </details>
         <details><summary>いくらかかる？</summary>
           <div class="hint">サーバー起動中のみ課金：約500円/時（混雑時の代替GPUは約690円/時）。動画1本の目安：標準画質5秒で約20円、人物固定・部分編集・エレメント使用は約2〜3倍。⚡高速モードで時間も費用も削減できます。</div>
@@ -1120,6 +1128,10 @@ function updatePromptHint() {
 }
 updateSec();
 
+// ⚡高速と⚡⚡超高速は択一（超高速は蒸留方式のためEasyCacheと併用不可）
+$('turboMode').addEventListener('change', () => { if ($('turboMode').checked) $('fastMode').checked = false; });
+$('fastMode').addEventListener('change', () => { if ($('fastMode').checked) $('turboMode').checked = false; });
+
 $('file').addEventListener('change', e => loadImage(e.target.files[0]));
 const drop = $('drop');
 drop.addEventListener('dragover', e => { e.preventDefault(); });
@@ -1263,6 +1275,7 @@ function buildPayload() {
     ref_video_b64: mode === 'edit' ? refVideoB64 : null,
     ref_video_name: refVideoName,
     keep_audio: mode === 'edit' ? $('keepAudio').checked : false,
+    turbo_mode: $('turboMode').checked,
     element_ids: elemUsable() ? [...selElems] : [],
     storyboard_images: (mode === 't2v' || mode === 'r2v') ? sbImages : null,
     fast_mode: $('fastMode').checked,
@@ -1381,7 +1394,7 @@ async function refreshGallery() {
         <video src="/videos/${encodeURIComponent(e.video)}" controls preload="metadata"></video>
         <div style="flex:1;min-width:200px">
           <div class="hmeta">
-            <span>${e.time}</span><span>${MODE_LABEL[e.mode] || '📝文章'}</span>${e.fast ? '<span>⚡高速</span>' : ''}
+            <span>${e.time}</span><span>${MODE_LABEL[e.mode] || '📝文章'}</span>${e.turbo ? '<span>⚡⚡超高速</span>' : e.fast ? '<span>⚡高速</span>' : ''}
             <span>${e.seconds}秒</span><span>${e.aspect}</span>
             ${(e.elements || []).map(n => '<span>📦@' + n + '</span>').join('')}
           </div>
@@ -1414,6 +1427,7 @@ function restoreEntry(i) {
   const e = HIST[i];
   setMode(['r2v', 'i2v', 'flf2v', 'edit'].includes(e.mode) ? e.mode : 't2v');
   if ($('fastMode')) $('fastMode').checked = !!e.fast;
+  if ($('turboMode')) $('turboMode').checked = !!e.turbo;
   if ($('keepAudio')) $('keepAudio').checked = e.keep_audio === undefined ? true : !!e.keep_audio;
   selElems = new Set((e.element_ids || []).filter(id => ELEMS.some(x => x.id === id)));
   renderElemChips();
