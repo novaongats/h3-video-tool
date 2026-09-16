@@ -18,7 +18,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "3.5.0"
+SELF_VERSION = "3.6.0"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -499,53 +499,106 @@ def compose_prompt(p):
     d = p.get("dialogue", "").strip()
     if d:
         v = p.get("voice", "").strip()
-        # 「@名前：セリフ」形式の行が並んでいれば会話モード、「ナレーション：」は画面外の声として扱う
-        lines = [ln.strip() for ln in d.splitlines() if ln.strip()]
-        conv = []
-        for ln in lines:
-            m = re.match(r"^@?([^：:]{1,10})[：:]\s*(.+)$", ln)
-            if m and (ln.startswith("@") or m.group(1).strip() in ("ナレーション", "ナレーター") or len(lines) > 1):
-                conv.append((m.group(1).strip(), m.group(2).strip()))
+        # --- 各行を解析: [時間帯] [@話者名:] セリフ本文 ---
+        # 時間帯の例: 「0.0～2.0秒：」「【2-5秒】」「0〜3秒 」など（→ 同一話者の時間指定として扱う。
+        #   旧版はこれを「話者名」と誤認して行ごとに別人(S1,S2,S3…)を割り当てるバグがあった）
+        time_re = re.compile(
+            r"^【?\s*(\d+(?:\.\d+)?)\s*[〜～\-−–~]\s*(\d+(?:\.\d+)?)\s*秒?\s*】?[：:。、\s]*")
+        name_re = re.compile(r"^@?([^：:\d\s][^：:]{0,9}?)\s*[：:]\s*(.+)$")
+        entries = []  # (time(start,end) or None, 話者名 or None, セリフ)
+        for ln in (x.strip() for x in d.splitlines()):
+            if not ln:
+                continue
+            t = None
+            tm = time_re.match(ln)
+            if tm and tm.end() < len(ln):
+                t = (tm.group(1), tm.group(2))
+                ln = ln[tm.end():].strip()
+            name = None
+            nm = name_re.match(ln)
+            if nm and (ln.startswith("@") or nm.group(1).strip() in ("ナレーション", "ナレーター")):
+                name, ln = nm.group(1).strip().lstrip("@"), nm.group(2).strip()
+            if ln:
+                entries.append((t, name, ln))
+
+        # 話者IDは「同じ話者＝同じ番号」で固定（公式ルール。名前なし行はすべて同一のS1）
+        sid = {}
+
+        def speaker_id(key):
+            if key not in sid:
+                sid[key] = f"S{len(sid) + 1}"
+            return sid[key]
+
+        named = sorted({nm for _, nm, _ in entries
+                        if nm and nm not in ("ナレーション", "ナレーター")})
+        out_lines = []
+        introduced = set()
+        for t, nm, text in entries:
+            time_en = f"From {t[0]} to {t[1]} seconds, " if t else ""
+            if nm in ("ナレーション", "ナレーター"):
+                s = speaker_id("__narrator__")
+                out_lines.append(
+                    f"{time_en}a narrator ({s}) says in an off-screen voiceover: "
+                    f"<d>[Japanese] {text}</d> "
+                    "While this voiceover plays, every on-screen character's lips remain completely closed.")
             else:
-                conv = None
-                break
-        if conv:
-            sid = {}
-            out_lines = []
-            for name, text in conv:
-                if name in ("ナレーション", "ナレーター"):
-                    out_lines.append("ナレーション（画面外の声。映像内の誰の口も動かさない）："
-                                     f"<d>[Japanese] {text}</d>")
+                key = nm or "__main__"
+                s = speaker_id(key)
+                if key not in introduced:
+                    introduced.add(key)
+                    if nm:
+                        who = f'the character 「{nm}」 ({s})'
+                    elif v:
+                        who = f"the main on-screen character ({s}), whose voice is 「{v}」,"
+                    else:
+                        who = f"the main on-screen character ({s})"
                 else:
-                    if name not in sid:
-                        sid[name] = f"S{len(sid) + 1}"
-                    out_lines.append(f"{name} ({sid[name]}) が話す。口の動きをこのセリフに正確に同期："
-                                     f"<d>[Japanese] {text}</d>")
-            block = "会話・音声:\n" + "\n".join(out_lines)
-            if v:
-                block += f"\n声の指定: {v}"
-            parts.append(block)
-        else:
-            who = f"登場人物 (S1)（{v}）" if v else "登場人物 (S1)"
-            parts.append(f"{who} がカメラに向かってはっきりと話す。口の動きはセリフに正確に同期する："
-                         f"<d>[Japanese] {d}</d>")
+                    who = f"({s})"
+                out_lines.append(
+                    f"{time_en}{who} says clearly in natural, fluent Japanese, "
+                    f"with lips synced precisely to this line: <d>[Japanese] {text}</d>")
+        block = "Dialogue:\n" + "\n".join(out_lines)
+        if v and named:
+            block += f"\nVoice casting note (Japanese): {v}"
+        parts.append(block)
+        parts.append(
+            "The only spoken words in this video are the lines inside the <d> tags above. "
+            "Do not add any other dialogue, narration, commentary, or voice-over. "
+            "Any quoted phrases inside the scene description are acting directions, not extra speech. "
+            "All speech must be natural, fluent Japanese with native pronunciation — "
+            "never Chinese and never English.")
 
     if mix in ("no_speech", "silent"):
-        parts.append("この動画では誰も一切話さない。セリフ、ナレーション、実況、ボイスオーバー、"
-                     "歌声、人の声を絶対に入れない。")
+        parts.append(
+            "Throughout the entire video, absolutely no one speaks: no dialogue, no narration, "
+            "no commentary, no voice-over, no singing, and no human voice of any kind. "
+            "Every on-screen person keeps their lips completely closed at all times.")
     else:
         if not d:
-            parts.append("指示していないセリフ・ナレーション・実況ボイスを勝手に追加しない。"
-                         "もし人物が自然に声を発する場合は必ず日本語のみ（中国語・英語の音声は禁止）。")
+            parts.append(
+                "Do not add any dialogue, narration, commentary, or voice-over that is not "
+                "explicitly written in this prompt. If a person vocalizes naturally, the voice "
+                "must be natural, fluent Japanese only — never Chinese and never English.")
         if mix == "voice_first":
-            parts.append("音のバランス：セリフを最優先で明瞭に。他の音は控えめの音量。")
+            parts.append("Audio balance: the dialogue is the top priority and must be clearly "
+                         "audible; keep all other sounds at a low volume.")
 
     if p.get("no_text", True):
-        parts.append("画面内に文字・字幕・ロゴ・透かしを一切出さない。")
+        parts.append("No on-screen text, subtitles, captions, logos, or watermarks of any kind.")
 
     # 公式の音声2区画（環境音・効果音 / 画面外の音楽）
     se = p.get("se", "").strip()
-    soundscape = se if se else "シーンに合った自然な環境音と、動きに伴う物理的な音。"
+    if se and se.upper() != "N/A":
+        soundscape = se
+        if mix in ("no_speech", "silent"):
+            soundscape += " (no human vocal sounds of any kind)"
+    elif mix == "silent":
+        soundscape = "N/A"  # 公式ルール: 完全な無音の指定時のみN/A
+    elif mix == "no_speech":
+        soundscape = ("Natural ambient sound that fits the scene and physical sounds of movement. "
+                      "No human vocal sounds of any kind.")
+    else:
+        soundscape = "Natural ambient sound that fits the scene, with physical sounds of movement."
     parts.append("overall_soundscape: " + soundscape)
 
     bgm = p.get("bgm", "").strip()
@@ -644,8 +697,11 @@ def plan_generation(params, elements):
         # @名前 → 正式タグ（ひらがな/カタカナ・大文字小文字の表記ゆれも吸収）
         prompt_text = replace_at_tags(prompt_text, tag_map)
         # @なしの「参照画像」「元動画」という普通の言葉も正式タグに自動変換
+        # （複数枚のときは「<Picture 1>、<Picture 2>を最初のフレームとして…」のような
+        #   文法崩れを起こさないよう、「参照画像（<Picture 1>、<Picture 2>）」の形で置換する）
         if refs_out:
-            prompt_text = prompt_text.replace("参照画像", pics)
+            rep = pics if len(refs_out) == 1 else f"参照画像（{pics}）"
+            prompt_text = prompt_text.replace("参照画像", rep)
         if mode == "edit":
             prompt_text = prompt_text.replace("元の動画", "<Video 1>").replace("元動画", "<Video 1>")
         if defs:
