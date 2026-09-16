@@ -18,7 +18,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "3.4.0"
+SELF_VERSION = "3.5.0"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -34,6 +34,8 @@ DEFAULT_CONFIG = {
     "pod_id": "",      # 起動時にNetwork Volumeから自動発見される
     "comfy_url": "",
     "auto_stop": True,
+    "local_mode": False,                    # このPCのComfyUIで生成する（GPUレンタル不要）
+    "local_url": "http://localhost:8188",
 }
 
 
@@ -79,6 +81,8 @@ def load_config():
                 cfg.update(json.load(f))
         except Exception:
             pass
+    if cfg.get("local_mode"):
+        cfg["comfy_url"] = (cfg.get("local_url") or "http://localhost:8188").rstrip("/")
     return cfg
 
 
@@ -391,6 +395,18 @@ def set_job(**kw):
 
 
 def ensure_pod_running(cfg):
+    if cfg.get("local_mode"):
+        # このPCのComfyUIに繋ぐだけ（GPUレンタルなし・課金なし）
+        set_job(state="waiting_comfy", message="このPCの生成エンジンに接続中…")
+        deadline = time.time() + 90
+        while time.time() < deadline:
+            if comfy_alive(cfg):
+                return
+            time.sleep(3)
+        raise RunPodError(
+            "【接続エラー】このPCの生成エンジン（ComfyUI）に接続できません。"
+            "ComfyUIを起動してから、もう一度お試しください"
+            f"（接続先: {cfg.get('comfy_url')}）")
     pod = resolve_pod(cfg)  # 他のPCがPodを作り直していても自動で追従する
     st = pod.get("desiredStatus") if pod else "MISSING"
     if st != "RUNNING":
@@ -969,7 +985,7 @@ def run_generation(params, image_blob, image_name):
             else:
                 audio_note = "（注意：このPCに音声処理ソフトffmpegが無いためAIの音声のままです）"
 
-        if params.get("auto_stop"):
+        if params.get("auto_stop") and not cfg.get("local_mode"):
             # 他の人（別PC）の生成がキューに残っていたら停止しない
             others_busy = False
             try:
@@ -1067,11 +1083,15 @@ class Handler(BaseHTTPRequestHandler):
             with open(os.path.join(BASE_DIR, "index.html"), "r", encoding="utf-8") as f:
                 self._send(200, f.read(), "text/html; charset=utf-8")
         elif path == "/api/config":
-            self._send(200, {"has_key": bool(cfg.get("api_key")), "auto_stop": cfg.get("auto_stop", True),
+            self._send(200, {"has_key": bool(cfg.get("api_key")) or bool(cfg.get("local_mode")),
+                             "auto_stop": cfg.get("auto_stop", True),
+                             "local_mode": bool(cfg.get("local_mode")),
                              "version": SELF_VERSION})
         elif path == "/api/status":
             out = {"job": dict(JOB)}
-            if not cfg.get("api_key"):
+            if cfg.get("local_mode"):
+                out["pod"] = "LOCAL_ON" if comfy_alive(cfg, timeout=4) else "LOCAL_OFF"
+            elif not cfg.get("api_key"):
                 out["pod"] = "NO_KEY"
             else:
                 out["balance"] = get_balance(cfg)
@@ -1148,6 +1168,9 @@ class Handler(BaseHTTPRequestHandler):
                     set_job(state="idle", message="", error=None)
                 self._send(200, {"ok": True})
             elif path == "/api/start":
+                if cfg.get("local_mode"):
+                    self._send(200, {"ok": True})
+                    return
                 if JOB["state"] in ("starting_pod", "waiting_comfy", "uploading", "generating", "downloading", "stopping_pod"):
                     self._send(409, {"error": "処理が進行中です"})
                     return
@@ -1165,6 +1188,9 @@ class Handler(BaseHTTPRequestHandler):
                 threading.Thread(target=manual_start, daemon=True).start()
                 self._send(200, {"ok": True})
             elif path == "/api/stop":
+                if cfg.get("local_mode"):
+                    self._send(200, {"ok": True})
+                    return
                 # 誰かの生成が動いている間は停止を拒否する（共有利用の事故防止）
                 try:
                     if comfy_alive(cfg):

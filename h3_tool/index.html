@@ -780,6 +780,7 @@
 <script>
 let mode = 't2v', aspect = '16:9', imgB64 = null, imgName = null, hasKey = false, generating = false;
 let view = 'create';
+let LOCAL = false;   // このPCで生成するモード（RunPod不使用）
 
 function $(id) { return document.getElementById(id); }
 
@@ -1112,7 +1113,9 @@ function setAspect(a) {
 function updateSec() {
   const s = $('seconds').value;
   $('secLabel').textContent = s + '秒';
-  $('costText').textContent = '目安 約' + Math.round(s * 3.5) + '〜' + Math.round(s * 5) + '円/本 + サーバー起動時間';
+  $('costText').textContent = LOCAL
+    ? 'このPCで生成するためレンタル料は0円（電気代のみ）'
+    : '目安 約' + Math.round(s * 3.5) + '〜' + Math.round(s * 5) + '円/本 + サーバー起動時間';
   updatePromptHint();
 }
 function updatePromptHint() {
@@ -1327,7 +1330,9 @@ async function poll() {
     const s = await api('/api/status');
     const pod = s.pod, job = s.job;
     const led = $('podLed'), txt = $('podText');
-    if (pod === 'RUNNING') { led.className = 'led on'; txt.textContent = '起動中（課金中 約500円/時）'; }
+    if (pod === 'LOCAL_ON') { led.className = 'led on'; txt.textContent = 'このPCで生成（レンタル料なし）'; }
+    else if (pod === 'LOCAL_OFF') { led.className = 'led off'; txt.textContent = '⚠️ 生成エンジンが起動していません（ComfyUIを起動してください）'; }
+    else if (pod === 'RUNNING') { led.className = 'led on'; txt.textContent = '起動中（課金中 約500円/時）'; }
     else if (pod === 'EXITED') { led.className = 'led off'; txt.textContent = '停止中（課金なし）'; }
     else if (pod === 'NO_KEY') { txt.textContent = 'APIキー未設定（設定ページへ）'; }
     else { led.className = 'led busy'; txt.textContent = pod; }
@@ -1451,6 +1456,13 @@ function restoreEntry(i) {
   try {
     const c = await api('/api/config');
     hasKey = c.has_key;
+    LOCAL = !!c.local_mode;
+    if (LOCAL) {
+      // RunPod専用のUI（起動/停止・残高・自動停止）はローカルでは不要なので隠す
+      ['btnStart', 'btnStop', 'balancePill'].forEach(id => { const el = $(id); if (el) el.style.display = 'none'; });
+      const as = $('autoStop'); if (as && as.closest('.sw')) as.closest('.sw').style.display = 'none';
+      const st = $('setup'); if (st) st.style.display = 'none';
+    }
     if (c.version) { $('verTag').textContent = 'v' + c.version; $('setVer').textContent = '現在のバージョン: v' + c.version + '（最新版は起動時に自動適用されます）'; }
     $('autoStop').checked = c.auto_stop !== false;
     if (!hasKey) go('settings');
