@@ -326,6 +326,7 @@
         <div class="tab" id="tab_flf2v" onclick="setMode('flf2v')"><span class="tico">🎬</span>始点→終点<small class="eb ng">📦不可</small></div>
         <div class="tab" id="tab_r2v" onclick="setMode('r2v')"><span class="tico">👤</span>人物固定<small class="eb ok">📦エレメント可</small></div>
         <div class="tab" id="tab_edit" onclick="setMode('edit')"><span class="tico">✂️</span>部分編集<small class="eb ok">📦エレメント可</small></div>
+        <div class="tab" id="tab_continue" onclick="setMode('continue')"><span class="tico">▶️</span>続きから<small class="eb ng">📦不可</small></div>
       </div>
 
       <!-- モード別の素材入力 -->
@@ -367,6 +368,17 @@
         <button class="clearbtn hidden" id="clrRef" onclick="clearZone('ref')">✕ 全部取り消す</button>
         <input type="file" id="refFiles" accept=".jpg,.jpeg,.png,.webp,.bmp" multiple class="hidden">
         <div class="hint">画像の下の「@名前」でプロンプトから指定できます。例：<b>@ユキと@レンがカフェで話す</b>（2人以上OK）</div>
+      </div>
+
+      <div class="card hidden" id="contArea" style="margin-top:14px">
+        <label class="lbl" style="margin-top:0">続きを作る元の動画（MP4・WebM・MKV／60MBまで）</label>
+        <div class="drop" onclick="document.getElementById('contVideo').click()">
+          クリックして動画を選択（この動画の最後のシーンから自然につながる続きを生成します）
+          <div id="contVideoPrev" style="font-size:12px;color:var(--ac2);margin-top:6px"></div>
+        </div>
+        <button class="clearbtn hidden" id="clrContVideo" onclick="clearZone('contvideo')">✕ 取り消す</button>
+        <input type="file" id="contVideo" accept=".mp4,.webm,.mkv,video/mp4" class="hidden">
+        <div class="hint">元動画の<b>最終フレーム</b>を自動で切り出し、そこから続きを生成します。つなげて長尺化するときは「作品」ページから前回の動画を保存 → ここに選択 → 続きの内容をプロンプトに書く、を繰り返し。<b>「画面の形」は元動画と同じ形を選んでください</b>。</div>
       </div>
 
       <div class="card hidden" id="editArea" style="margin-top:14px">
@@ -449,6 +461,26 @@
               <button data-a="9:16" onclick="setAspect('9:16')">📱 縦長</button>
               <button data-a="1:1" onclick="setAspect('1:1')">⬜ 正方形</button>
             </div>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:8px;align-items:flex-end">
+          <div style="flex:1;min-width:220px">
+            <label class="lbl" style="margin-top:0">🎇 エフェクト（公式の一発演出）</label>
+            <select id="effectSel" class="txt">
+              <option value="">なし</option>
+              <option value="minimaxh3_bullet_time">バレットタイム（時が止まり回り込む）</option>
+              <option value="minimaxh3_kiss_camera">キスカメラ（スタジアム風の急ズーム演出）</option>
+              <option value="minimaxh3_truman_show">トゥルーマンショー（世界がセットだった引き）</option>
+              <option value="minimaxh3_fire_breath">火を吹く（ファイアブレス）</option>
+              <option value="minimaxh3_blooming_flowers">花が咲き乱れる</option>
+              <option value="minimaxh3_four_seasons">四季の移り変わり</option>
+              <option value="minimaxh3_spiral_ascent">螺旋上昇カメラ（スパイラル）</option>
+              <option value="minimaxh3_storm_magic">嵐の魔法（ストーム召喚）</option>
+              <option value="minimaxh3_dark_magic">闇の魔法（ダークオーラ）</option>
+              <option value="minimaxh3_art_is_explosion">アート爆発（芸術的エクスプロージョン）</option>
+            </select>
+            <div class="hint">選ぶだけで映画的な演出が乗ります。被写体が映る動画で効果大。</div>
           </div>
         </div>
 
@@ -808,15 +840,17 @@ const MODE_PLACEHOLDER = {
   flf2v: '例：最初の画像の昼の街並みから、最後の画像の夜景へ、時間が流れるように滑らかに変化していく。カメラはゆっくり右へ移動しながら繋ぐ。',
   r2v: '例：@画像1の女性と@画像2の男性が、カフェの窓際で向かい合って楽しそうに話している。@画像1がコーヒーを一口飲んで微笑む。午後の柔らかい光。',
   edit: '例：@元動画の人物の顔だけを@画像1の顔に置き換える。髪型・服装・背景・動き・カメラワークは@元動画のまま一切変えない。',
+  continue: '例：前の動画の続き。女性がゆっくり立ち上がり、窓の外を見て微笑む。カメラはそのまま彼女を追う。雰囲気・光・人物の見た目は前の動画と完全に同じまま。',
 };
 
 function setMode(m) {
   mode = m;
-  ['t2v', 'i2v', 'flf2v', 'r2v', 'edit'].forEach(t => $('tab_' + t).classList.toggle('sel', m === t));
+  ['t2v', 'i2v', 'flf2v', 'r2v', 'edit', 'continue'].forEach(t => $('tab_' + t).classList.toggle('sel', m === t));
   $('imgArea').classList.toggle('hidden', m !== 'i2v');
   $('flfArea').classList.toggle('hidden', m !== 'flf2v');
   $('refArea').classList.toggle('hidden', m !== 'r2v');
   $('editArea').classList.toggle('hidden', m !== 'edit');
+  $('contArea').classList.toggle('hidden', m !== 'continue');
   $('sbArea').classList.toggle('hidden', !['t2v', 'r2v'].includes(m));
   $('prompt').placeholder = MODE_PLACEHOLDER[m] || MODE_PLACEHOLDER.t2v;
   renderElemChips();
@@ -1040,6 +1074,7 @@ function clearZone(z) {
   if (z === 'ref') { refImages = []; $('refPreview').innerHTML = ''; $('refFiles').value = ''; $('clrRef').classList.add('hidden'); }
   if (z === 'editRef') { editImages = []; $('editRefPreview').innerHTML = ''; $('editRefFiles').value = ''; $('clrEditRef').classList.add('hidden'); }
   if (z === 'video') { refVideoB64 = null; refVideoName = null; $('refVideoPrev').textContent = ''; $('refVideo').value = ''; $('clrVideo').classList.add('hidden'); }
+  if (z === 'contvideo') { contVideoB64 = null; contVideoName = null; $('contVideoPrev').textContent = ''; $('contVideo').value = ''; $('clrContVideo').classList.add('hidden'); }
 }
 
 let editImages = [];
@@ -1084,6 +1119,15 @@ $('flfLast').addEventListener('change', e => {
   const f = e.target.files[0]; if (!f) return;
   const r = new FileReader();
   r.onload = () => { flfLastB64 = r.result.split(',')[1]; flfLastName = f.name; $('flfLastPrev').innerHTML = '<img src="' + r.result + '">'; $('clrFlfLast').classList.remove('hidden'); };
+  r.readAsDataURL(f);
+});
+
+let contVideoB64 = null, contVideoName = null;
+$('contVideo').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  if (f.size > 60 * 1024 * 1024) { alert('動画が大きすぎます（60MBまで）'); $('contVideo').value = ''; return; }
+  const r = new FileReader();
+  r.onload = () => { contVideoB64 = r.result.split(',')[1]; contVideoName = f.name; $('contVideoPrev').textContent = '🎞️ ' + f.name + '（' + Math.round(f.size / 1024 / 1024 * 10) / 10 + 'MB）'; $('clrContVideo').classList.remove('hidden'); };
   r.readAsDataURL(f);
 });
 
@@ -1277,6 +1321,9 @@ function buildPayload() {
     ref_images: mode === 'r2v' ? refImages : mode === 'edit' ? editImages : null,
     ref_video_b64: mode === 'edit' ? refVideoB64 : null,
     ref_video_name: refVideoName,
+    cont_video_b64: mode === 'continue' ? contVideoB64 : null,
+    cont_video_name: contVideoName,
+    effect: $('effectSel').value,
     keep_audio: mode === 'edit' ? $('keepAudio').checked : false,
     turbo_mode: $('turboMode').checked,
     element_ids: elemUsable() ? [...selElems] : [],
@@ -1295,6 +1342,7 @@ function validateInputs() {
   if (mode === 'flf2v' && (!flfFirstB64 || !flfLastB64)) { alert('最初と最後の画像を両方選択してください'); return false; }
   if (mode === 'r2v' && refImages.length === 0 && selElems.size === 0) { alert('エレメントを選ぶか、参照画像を選択してください'); return false; }
   if (mode === 'edit' && !refVideoB64) { alert('編集する元動画を選択してください'); return false; }
+  if (mode === 'continue' && !contVideoB64) { alert('続きを作る元の動画を選択してください'); return false; }
   return true;
 }
 
@@ -1393,7 +1441,7 @@ async function refreshGallery() {
   try {
     const h = await api('/api/history');
     HIST = h.history || [];
-    const MODE_LABEL = { i2v: '🖼️画像', flf2v: '🎬始点→終点', r2v: '👤人物固定', edit: '✂️部分編集', t2v: '📝文章' };
+    const MODE_LABEL = { i2v: '🖼️画像', flf2v: '🎬始点→終点', r2v: '👤人物固定', edit: '✂️部分編集', continue: '▶️続きから', t2v: '📝文章' };
     $('histList').innerHTML = HIST.map((e, i) => `
       <div class="hcard">
         <video src="/videos/${encodeURIComponent(e.video)}" controls preload="metadata"></video>
@@ -1433,6 +1481,7 @@ function restoreEntry(i) {
   setMode(['r2v', 'i2v', 'flf2v', 'edit'].includes(e.mode) ? e.mode : 't2v');
   if ($('fastMode')) $('fastMode').checked = !!e.fast;
   if ($('turboMode')) $('turboMode').checked = !!e.turbo;
+  if ($('effectSel')) $('effectSel').value = e.effect || '';
   if ($('keepAudio')) $('keepAudio').checked = e.keep_audio === undefined ? true : !!e.keep_audio;
   selElems = new Set((e.element_ids || []).filter(id => ELEMS.some(x => x.id === id)));
   renderElemChips();

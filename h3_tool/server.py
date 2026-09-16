@@ -18,7 +18,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "3.6.0"
+SELF_VERSION = "3.7.0"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -433,7 +433,9 @@ def ensure_pod_running(cfg):
             try:
                 create_replacement_pod(cfg)
             except RunPodError as e:
-                if "not enough free GPUs" in str(e) or "no longer any instances" in str(e).lower():
+                low = str(e).lower()
+                if ("not enough free gpus" in low or "no longer any instances" in low
+                        or "no instances" in low or "not currently available" in low):
                     raise RunPodError(
                         "データセンター全体でGPUの空きがありません。"
                         "30分〜数時間おいて再試行してください。")
@@ -731,6 +733,19 @@ def plan_generation(params, elements):
                            "動き、カメラワーク、構図、シーンの進行、タイミング、背景、照明はすべて<Video 1>から"
                            f"継承し、新しい動きを追加しない。{target}{voice_rule}\n\n"
                            "変更の指示: " + prompt_text)
+    if mode == "continue":
+        prompt_text = (
+            "This video is a direct continuation of a previous clip. It starts exactly from the "
+            "provided first frame, which is the final frame of the previous clip. Keep the "
+            "characters, clothing, background, lighting, camera style, and overall visual style "
+            "perfectly consistent with that frame, and continue the motion seamlessly without "
+            "any cut or scene change at the start.\n\n" + prompt_text)
+
+    # 🎇 公式エフェクト（embedding）: 選択されていればプロンプト末尾で呼び出す（公式の使用法）
+    eff = (params.get("effect") or "").strip()
+    if re.fullmatch(r"minimaxh3_[a-z_]+", eff):
+        prompt_text += f"\n\nembedding:{eff}"
+
     return {"mode": mode, "prompt": prompt_text, "refs": refs_out}
 
 
@@ -752,6 +767,10 @@ def save_report(params, plan, elements, seed, video, error):
              f" / ステップ: {params.get('steps')} / 高速: {fast_label} / シード: {seed}")
     if params.get("mode") == "edit":
         L.append(f"元動画: {params.get('ref_video_name')} / 元動画の音声を使う: {'ON' if params.get('keep_audio') else 'OFF'}")
+    if params.get("mode") == "continue":
+        L.append(f"続きを作る元動画: {params.get('cont_video_name')}")
+    if params.get("effect"):
+        L.append(f"エフェクト: {params.get('effect')}")
     if elements:
         L.append("使用エレメント:")
         for e in elements:
@@ -812,11 +831,12 @@ def run_generation(params, image_blob, image_name):
 
         ensure_pod_running(cfg)
         wf_file = {"i2v": "wf_i2v.json", "flf2v": "wf_i2v.json",
-                   "r2v": "wf_r2v.json", "edit": "wf_r2v.json"}.get(mode, "wf_t2v.json")
+                   "r2v": "wf_r2v.json", "edit": "wf_r2v.json",
+                   "continue": "wf_i2v.json"}.get(mode, "wf_t2v.json")
         with open(os.path.join(BASE_DIR, wf_file), "r", encoding="utf-8") as f:
             wf = json.load(f)
 
-        # ノードIDがモードで異なる
+        # ノードIDがモードで異なる（continueはi2vと同じ骨格を使う）
         ids = {"prompt": "105:104", "dur": "105:111", "seed": "105:15", "steps": "105:9"}
         if mode in ("r2v", "edit"):
             ids = {"prompt": "138", "dur": "132", "seed": "129", "steps": "124"}
@@ -835,7 +855,8 @@ def run_generation(params, image_blob, image_name):
             wf[ids["steps"]]["inputs"]["steps"] = max(10, min(30, int(params.get("steps", 20))))
         except (TypeError, ValueError):
             pass
-        wf["115"]["inputs"]["aspect_ratio"] = pick_aspect(cfg, params.get("aspect", "16:9"))
+        if "115" in wf:  # 続き生成テンプレはサイズを元動画から引き継ぐため115が無い場合がある
+            wf["115"]["inputs"]["aspect_ratio"] = pick_aspect(cfg, params.get("aspect", "16:9"))
 
         if mode in ("i2v", "flf2v"):
             if not image_blob:
@@ -923,6 +944,31 @@ def run_generation(params, image_blob, image_name):
             wf["211"] = {"inputs": {"video": ["210", 0]},
                          "class_type": "GetVideoComponents", "_meta": {"title": "動画をコマに分解"}}
             wf["136"]["inputs"]["ref_videos.ref_video_0"] = ["211", 0]
+
+        if mode == "continue":
+            import base64
+            cv = params.get("cont_video_b64")
+            if not cv:
+                raise RunPodError("【入力不足】続きを作る元の動画が選択されていません")
+            set_job(state="uploading", message="元動画をアップロード中…（サイズにより数十秒）")
+            vup = comfy_upload_image(cfg, params.get("cont_video_name") or "prev.mp4",
+                                     base64.b64decode(cv))
+            vname = vup.get("name")
+            vsub = vup.get("subfolder") or ""
+            # 元動画の最終フレームを自動で切り出し、i2vの始点画像として繋ぐ
+            wf["220"] = {"inputs": {"file": (vsub + "/" + vname) if vsub else vname},
+                         "class_type": "LoadVideo", "_meta": {"title": "続きの元動画"}}
+            wf["221"] = {"inputs": {"video": ["220", 0]},
+                         "class_type": "GetVideoComponents", "_meta": {"title": "動画をコマに分解"}}
+            wf["222"] = {"inputs": {"image": ["221", 0]},
+                         "class_type": "GetImageSize", "_meta": {"title": "コマ数を取得"}}
+            wf["223"] = {"inputs": {"expression": "a - 1", "values.a": ["222", 2]},
+                         "class_type": "ComfyMathExpression", "_meta": {"title": "最終コマ番号"}}
+            wf["224"] = {"inputs": {"image": ["221", 0], "batch_index": ["223", 1], "length": 1},
+                         "class_type": "ImageFromBatch", "_meta": {"title": "最終フレームを切り出す"}}
+            wf["105:104"]["inputs"]["first_frame"] = ["224", 0]
+            if "114" in wf:  # i2v骨格の既定LoadImage（未使用）は取り除く
+                del wf["114"]
 
         wf[ids["prompt"]]["inputs"]["prompt" if mode not in ("r2v", "edit") else "value"] = prompt_text
 
@@ -1079,6 +1125,7 @@ def run_generation(params, image_blob, image_name):
             "steps": params.get("steps", "20"),
             "fast": bool(params.get("fast_mode")),
             "turbo": bool(params.get("turbo_mode")),
+            "effect": params.get("effect") or "",
             "keep_audio": bool(params.get("keep_audio")),
             "elements": [e.get("name") for e in elements],
             "element_ids": element_ids,
