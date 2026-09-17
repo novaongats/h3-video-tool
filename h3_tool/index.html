@@ -505,7 +505,7 @@
 
 画面外の声：
 ナレーション：その日、街は静かだった"></textarea>
-          <div class="hint">「@名前：セリフ」で会話（2人以上OK）、「ナレーション：」で画面外の声、「0〜2秒：セリフ」で時間指定もOK（同じ人が話します）。⚠️セリフはこの欄だけに書き、プロンプト本文には同じセリフを書かない（二重になると精度が落ちます）。しゃべらせない時は下の音バランスで🔇を選択。</div>
+          <div class="hint">「@名前：セリフ」で会話（2人以上OK）、「<b>心の声：</b>」「<b>ナレーション：</b>」で画面外の声（唇を動かさない独白・語り）、「0〜2秒：セリフ」で時間指定もOK（同じ人が話します。組み合わせ例：0〜4秒 心の声：俺には理由がある）。カギカッコ「」は書いても自動で外れます。⚠️セリフはこの欄だけに書き、プロンプト本文には同じセリフを書かない（二重になると発音・リップシンクが劣化。時間指定があれば場面との対応は伝わります）。しゃべらせない時は下の音バランスで🔇を選択。</div>
           <label class="lbl">声の感じ</label>
           <input class="txt" id="voice" placeholder="例：明るく元気な若い女性の声">
           <label class="lbl">BGM</label>
@@ -1342,6 +1342,9 @@ function validateInputs() {
   if (mode === 'flf2v' && (!flfFirstB64 || !flfLastB64)) { alert('最初と最後の画像を両方選択してください'); return false; }
   if (mode === 'r2v' && refImages.length === 0 && selElems.size === 0) { alert('エレメントを選ぶか、参照画像を選択してください'); return false; }
   if (mode === 'edit' && !refVideoB64) { alert('編集する元動画を選択してください'); return false; }
+  if ($('turboMode').checked && $('dialogue').value.trim()) {
+    if (!confirm('⚡⚡超高速モードは、セリフの音声品質（日本語の明瞭さ・声量）が落ちやすいです。\nセリフ重視の動画は「⚡高速モード」か通常モードがおすすめです。\n\nこのまま超高速で生成しますか？')) return false;
+  }
   if (mode === 'continue' && !contVideoB64) { alert('続きを作る元の動画を選択してください'); return false; }
   return true;
 }

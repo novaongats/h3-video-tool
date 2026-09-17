@@ -18,7 +18,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "3.7.0"
+SELF_VERSION = "3.7.1"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -491,6 +491,23 @@ def replace_at_tags(text, mapping):
     return "".join(out)
 
 
+NARRATOR_NAMES = ("ナレーション", "ナレーター", "ナレ", "ボイスオーバー", "心の声", "モノローグ", "独白")
+QUOTE_PAIRS = [("「", "」"), ("『", "』"), ("“", "”"), ("\"", "\""), ("'", "'"), ("｢", "｣")]
+
+
+def strip_quotes(s):
+    """セリフを丸ごと囲むカギカッコ・引用符だけを外す（文中の引用は残す）"""
+    s = s.strip()
+    changed = True
+    while changed and len(s) >= 2:
+        changed = False
+        for a, b in QUOTE_PAIRS:
+            if s.startswith(a) and s.endswith(b) and s.count(a) == 1 and s.count(b) == 1:
+                s = s[len(a):-len(b)].strip()
+                changed = True
+    return s
+
+
 def compose_prompt(p):
     """フォームの各欄から、MiniMax公式プロンプトガイド準拠の形式に組み立てる。
     公式形式: 本文（Shot構成・話者ID・<d>タグのセリフ） + overall_soundscape + non_diegetic_music
@@ -518,8 +535,10 @@ def compose_prompt(p):
                 ln = ln[tm.end():].strip()
             name = None
             nm = name_re.match(ln)
-            if nm and (ln.startswith("@") or nm.group(1).strip() in ("ナレーション", "ナレーター")):
+            if nm and (ln.startswith("@") or nm.group(1).strip() in NARRATOR_NAMES):
                 name, ln = nm.group(1).strip().lstrip("@"), nm.group(2).strip()
+            # セリフを囲むカギカッコ・引用符は除去（公式ルール: <d>内は話す言葉そのものだけ）
+            ln = strip_quotes(ln)
             if ln:
                 entries.append((t, name, ln))
 
@@ -532,15 +551,20 @@ def compose_prompt(p):
             return sid[key]
 
         named = sorted({nm for _, nm, _ in entries
-                        if nm and nm not in ("ナレーション", "ナレーター")})
+                        if nm and nm not in NARRATOR_NAMES})
         out_lines = []
         introduced = set()
         for t, nm, text in entries:
             time_en = f"From {t[0]} to {t[1]} seconds, " if t else ""
-            if nm in ("ナレーション", "ナレーター"):
+            if nm in NARRATOR_NAMES:
                 s = speaker_id("__narrator__")
+                if "__narrator__" not in introduced and v and not named:
+                    introduced.add("__narrator__")
+                    who = f"a narrator ({s}), whose voice is 「{v}」,"
+                else:
+                    who = f"a narrator ({s})"
                 out_lines.append(
-                    f"{time_en}a narrator ({s}) says in an off-screen voiceover: "
+                    f"{time_en}{who} says in an off-screen voiceover: "
                     f"<d>[Japanese] {text}</d> "
                     "While this voiceover plays, every on-screen character's lips remain completely closed.")
             else:
