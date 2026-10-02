@@ -1370,9 +1370,10 @@ function estimateMinutes() {
   const mp = parseFloat($('qualityMp').value) || 0.4;
   const turbo = $('turboMode').checked;
   const steps = turbo ? 8 : (parseInt($('steps').value) || 20);
-  let m = 3.0 * (sec / 5) * (mp / 0.4) * (steps / 20);
-  const refEngine = ['r2v', 'edit'].includes(mode) || (elemUsable() && selElems.size > 0) || (sbImages.length > 0);
-  if (refEngine) m *= 2.5;
+  let m = 2.0 * (sec / 5) * (mp / 0.4) * (steps / 20);
+  const refEngine = mode === 'r2v' || (elemUsable() && selElems.size > 0) || (sbImages.length > 0);
+  if (mode === 'edit') m *= 4.0;        // 元動画のコマも処理するため最も重い
+  else if (refEngine) m *= 2.5;         // 参照画像ぶん重い
   if (!turbo && !$('fastMode').checked) m *= 1.4;
   return Math.max(1, Math.round(m));
 }

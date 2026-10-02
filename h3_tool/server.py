@@ -18,7 +18,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "3.8.0"
+SELF_VERSION = "3.8.1"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -644,15 +644,19 @@ CANCEL = {"on": False}   # 生成の中止要求フラグ
 
 def estimate_minutes(params, mode):
     """この設定で何分かかるかの目安。タイムアウト時間の決定と事前警告に使う。
-    基準: 5秒・0.4MP・20ステップ・高速ON・文章からエンジン = 約3分（実測より）。
+    基準: 5秒・0.4MP・20ステップ・高速ON・文章からエンジン = 約2分。
+    較正の根拠（いずれも実測）: 文章5秒=約2分 / 部分編集5秒=約8.5分 /
+    15秒・最高画質・25step・高速OFF・参照=約60〜68分（2026-10-02）。
     ※index.html の estimateMinutes() と同じ計算式。片方だけ変えないこと。"""
     sec = float(params.get("seconds", 5) or 5)
     mp = float(params.get("quality_mp", 0.4) or 0.4)
     turbo = bool(params.get("turbo_mode"))
     steps = 8 if turbo else int(params.get("steps", 20) or 20)
-    m = 3.0 * (sec / 5.0) * (mp / 0.4) * (steps / 20.0)
-    if mode in ("r2v", "edit"):
-        m *= 2.5            # 参照エンジン（人物固定・部分編集・エレメント使用）は重い
+    m = 2.0 * (sec / 5.0) * (mp / 0.4) * (steps / 20.0)
+    if mode == "edit":
+        m *= 4.0            # 元動画のコマも処理するため最も重い
+    elif mode == "r2v":
+        m *= 2.5            # 参照画像ぶん重い（人物固定・エレメント使用）
     if not turbo and not params.get("fast_mode"):
         m *= 1.4            # 高速モードOFF
     return max(1, int(round(m)))
