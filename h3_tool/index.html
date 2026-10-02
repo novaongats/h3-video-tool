@@ -571,6 +571,7 @@
           <div class="msg" id="progMsg">準備中…</div>
           <div class="pbar wave" id="pbar"><div id="pbarFill"></div></div>
           <div class="elapsed" id="elapsed"></div>
+          <button class="btn-danger" style="margin-top:12px;font-size:12.5px;padding:7px 16px" onclick="cancelGeneration()">⏹ 生成を中止</button>
         </div>
       </div>
 
@@ -588,6 +589,7 @@
           <button style="padding:5px 12px;font-size:12px" onclick="clearError()">✕ 閉じる</button>
         </div>
         <div class="err" id="errMsg"></div>
+        <button class="btn-danger hidden" id="errCancelBtn" style="margin-top:10px;font-size:12.5px;padding:7px 16px" onclick="cancelGeneration()">⏹ サーバー上の生成を中止する</button>
         <div class="hint" id="errReport"></div>
         <div class="hint">GPU満席の場合は時間をおいて再試行。繰り返す場合はこの画面を管理者へ。</div>
       </div>
@@ -1362,9 +1364,44 @@ async function previewPrompt() {
   } catch (e) { alert(e.message); }
 }
 
+// この設定で何分かかるかの目安（server.py の estimate_minutes() と同じ式。片方だけ変えないこと）
+function estimateMinutes() {
+  const sec = +$('seconds').value || 5;
+  const mp = parseFloat($('qualityMp').value) || 0.4;
+  const turbo = $('turboMode').checked;
+  const steps = turbo ? 8 : (parseInt($('steps').value) || 20);
+  let m = 3.0 * (sec / 5) * (mp / 0.4) * (steps / 20);
+  const refEngine = ['r2v', 'edit'].includes(mode) || (elemUsable() && selElems.size > 0) || (sbImages.length > 0);
+  if (refEngine) m *= 2.5;
+  if (!turbo && !$('fastMode').checked) m *= 1.4;
+  return Math.max(1, Math.round(m));
+}
+
+async function cancelGeneration() {
+  if (!confirm(`生成を中止します。よろしいですか？
+（サーバー上で動いている処理も止めます）`)) return;
+  try {
+    await api('/api/cancel', { method: 'POST' });
+    toast('生成を中止しました');
+    $('errCancelBtn').classList.add('hidden');
+  } catch (e) { alert(e.message); }
+}
+
 async function generate() {
   if (generating) return;
   if (!validateInputs()) return;
+  // 重い設定のときは、始める前に所要時間と費用を知らせる（タイムアウト・課金事故の防止）
+  const est = estimateMinutes();
+  if (est >= 25) {
+    const yen = Math.round(est * 8.5);   // H100 約500円/時
+    if (!confirm(`⚠️ この設定は時間がかかります
+
+推定: 約${est}分（レンタル料 約${yen}円）
+
+短くするには、長さを減らす・画質を下げる・⚡⚡超高速モードをONにしてください。
+
+このまま生成しますか？`)) return;
+  }
   $('doneCard').classList.add('hidden');
   $('errCard').classList.add('hidden');
   try {
@@ -1425,6 +1462,8 @@ async function poll() {
     if (job.state === 'error' && job.error) {
       $('errCard').classList.remove('hidden');
       $('errMsg').textContent = job.error;
+      // サーバー上で処理が続いている可能性があるエラーのときだけ中止ボタンを出す
+      $('errCancelBtn').classList.toggle('hidden', !/タイムアウト|中断/.test(job.error || ''));
       $('errReport').innerHTML = job.report ? '📋 <a href="/videos/' + encodeURIComponent(job.report) + '" download>診断ファイルを保存</a>して管理者へ送ると原因を特定できます' : '';
     }
     pollFails = 0;

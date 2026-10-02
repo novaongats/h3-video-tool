@@ -18,7 +18,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "3.7.1"
+SELF_VERSION = "3.8.0"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -639,6 +639,25 @@ def compose_prompt(p):
     return "\n\n".join(x for x in parts if x)
 
 
+CANCEL = {"on": False}   # 生成の中止要求フラグ
+
+
+def estimate_minutes(params, mode):
+    """この設定で何分かかるかの目安。タイムアウト時間の決定と事前警告に使う。
+    基準: 5秒・0.4MP・20ステップ・高速ON・文章からエンジン = 約3分（実測より）。
+    ※index.html の estimateMinutes() と同じ計算式。片方だけ変えないこと。"""
+    sec = float(params.get("seconds", 5) or 5)
+    mp = float(params.get("quality_mp", 0.4) or 0.4)
+    turbo = bool(params.get("turbo_mode"))
+    steps = 8 if turbo else int(params.get("steps", 20) or 20)
+    m = 3.0 * (sec / 5.0) * (mp / 0.4) * (steps / 20.0)
+    if mode in ("r2v", "edit"):
+        m *= 2.5            # 参照エンジン（人物固定・部分編集・エレメント使用）は重い
+    if not turbo and not params.get("fast_mode"):
+        m *= 1.4            # 高速モードOFF
+    return max(1, int(round(m)))
+
+
 def plan_generation(params, elements):
     """参照素材（エレメント・画像・絵コンテ）の解決と最終プロンプトの組み立て。
     生成本番と「送信内容の確認」プレビューが同じこの関数を通る（＝見た通りのものが送られる保証）。
@@ -1015,12 +1034,17 @@ def run_generation(params, image_blob, image_name):
         if not pid:
             raise RunPodError("生成リクエストが受け付けられませんでした: " + json.dumps(res, ensure_ascii=False)[:300])
 
-        deadline = time.time() + 2400
+        est_min = estimate_minutes(params, mode)
+        limit_min = min(180, max(45, est_min * 2))   # 見積の2倍待つ（最低45分・最大3時間）
+        deadline = time.time() + limit_min * 60
+        CANCEL["on"] = False
         entry = None
         fails = 0
         last_step = 0
         while time.time() < deadline:
             time.sleep(8)
+            if CANCEL["on"]:
+                raise RunPodError("【キャンセル】生成を中止しました")
             # 進捗の実況: 順番待ち→ステップ進捗→経過時間 の順で分かるものを表示
             try:
                 q = comfy_get(cfg, "/queue", timeout=10)
@@ -1065,7 +1089,11 @@ def run_generation(params, image_blob, image_name):
                 if st.get("status_str") == "error":
                     raise RunPodError("生成中にエラーが発生しました。プロンプトや秒数を変えてお試しください。")
         if not entry:
-            raise RunPodError("生成がタイムアウトしました")
+            raise RunPodError(
+                f"【タイムアウト】{limit_min}分待ちましたが完成しませんでした"
+                f"（この設定の目安は約{est_min}分）。サーバー側ではまだ生成が続いている可能性があります。"
+                "赤い「⏹ 生成を中止」ボタンで止めてから、サーバーを停止してください。"
+                "次回は長さ・画質・ステップ数を下げるか、⚡⚡超高速モードをお使いください")
 
         vid = find_video_in_history(entry)
         if not vid:
@@ -1314,6 +1342,20 @@ class Handler(BaseHTTPRequestHandler):
                         started_at=time.time(), error=None)
                 threading.Thread(target=manual_start, daemon=True).start()
                 self._send(200, {"ok": True})
+            elif path == "/api/cancel":
+                # 生成を中止: ComfyUIに割り込み＋順番待ちを消す（サーバー上の処理を本当に止める）
+                CANCEL["on"] = True
+                errs = []
+                for p_, b_ in (("/interrupt", {}), ("/queue", {"clear": True})):
+                    try:
+                        http_json(cfg["comfy_url"] + p_, method="POST", body=b_, timeout=20)
+                    except Exception as e:
+                        errs.append(f"{p_}: {type(e).__name__}")
+                set_job(state="error", message="",
+                        error="【キャンセル】生成を中止しました。"
+                              + ("サーバーを使い終わったら「■停止」を押してください"
+                                 if not errs else f"※一部の中止命令が届きませんでした（{', '.join(errs)}）"))
+                self._send(200, {"ok": True, "errors": errs})
             elif path == "/api/stop":
                 if cfg.get("local_mode"):
                     self._send(200, {"ok": True})
@@ -1325,8 +1367,10 @@ class Handler(BaseHTTPRequestHandler):
                         busy = len(q.get("queue_running") or []) + len(q.get("queue_pending") or [])
                         if busy:
                             self._send(409, {"error": (
-                                f"いま誰かが動画を生成中のため停止しませんでした（実行中＋順番待ち: {busy}件）。"
-                                "生成が終わるのを待つか、生成した人の「自動停止」に任せてください")})
+                                f"いま動画を生成中のため停止しませんでした（実行中＋順番待ち: {busy}件）。"
+                                "他の人が使っている場合は終わるのを待ってください。"
+                                "自分の生成が終わらない／タイムアウトした場合は、"
+                                "赤い「⏹ 生成を中止」ボタンで中止してから停止してください")})
                             return
                 except RunPodError:
                     raise
