@@ -818,7 +818,7 @@
 </div>
 
 <script>
-let mode = 't2v', aspect = '16:9', imgB64 = null, imgName = null, hasKey = false, generating = false;
+let mode = 't2v', aspect = '16:9', imgB64 = null, imgName = null, imgUrl = null, hasKey = false, generating = false;
 let view = 'create';
 let LOCAL = false;   // このPCで生成するモード（RunPod不使用）
 
@@ -904,7 +904,7 @@ function sbToFirstFrame() {
   const b64 = sbImages[0].b64, nm = sbImages[0].name, url = sbUrls[0];
   clearSb();
   setMode('i2v');
-  imgB64 = b64; imgName = nm;
+  imgB64 = b64; imgName = nm; imgUrl = url;
   $('preview').innerHTML = '<img src="' + url + '">';
   $('clrImg').classList.remove('hidden');
   const im = new Image();
@@ -1117,9 +1117,9 @@ async function registerElement() {
 
 // ---------- 素材入力 ----------
 function clearZone(z) {
-  if (z === 'img') { imgB64 = null; imgName = null; $('preview').innerHTML = ''; $('file').value = ''; $('clrImg').classList.add('hidden'); }
-  if (z === 'flfFirst') { flfFirstB64 = null; flfFirstName = null; $('flfFirstPrev').innerHTML = ''; $('flfFirst').value = ''; $('clrFlfFirst').classList.add('hidden'); }
-  if (z === 'flfLast') { flfLastB64 = null; flfLastName = null; $('flfLastPrev').innerHTML = ''; $('flfLast').value = ''; $('clrFlfLast').classList.add('hidden'); }
+  if (z === 'img') { imgB64 = null; imgName = null; imgUrl = null; cropped.img = null; $('preview').innerHTML = ''; $('file').value = ''; $('clrImg').classList.add('hidden'); }
+  if (z === 'flfFirst') { flfFirstB64 = null; flfFirstName = null; flfFirstUrl = null; cropped.flfFirst = null; $('flfFirstPrev').innerHTML = ''; $('flfFirst').value = ''; $('clrFlfFirst').classList.add('hidden'); }
+  if (z === 'flfLast') { flfLastB64 = null; flfLastName = null; flfLastUrl = null; cropped.flfLast = null; $('flfLastPrev').innerHTML = ''; $('flfLast').value = ''; $('clrFlfLast').classList.add('hidden'); }
   if (z === 'ref') { refImages = []; $('refPreview').innerHTML = ''; $('refFiles').value = ''; $('clrRef').classList.add('hidden'); }
   if (z === 'editRef') { editImages = []; $('editRefPreview').innerHTML = ''; $('editRefFiles').value = ''; $('clrEditRef').classList.add('hidden'); }
   if (z === 'video') { refVideoB64 = null; refVideoName = null; $('refVideoPrev').textContent = ''; $('refVideo').value = ''; $('clrVideo').classList.add('hidden'); }
@@ -1157,19 +1157,81 @@ $('editRefFiles').addEventListener('change', e => {
   [...e.target.files].slice(0, 4).forEach(f => addRefItem(editImages, $('editRefPreview'), 'clrEditRef', f));
 });
 
-let flfFirstB64 = null, flfFirstName = null, flfLastB64 = null, flfLastName = null;
+let flfFirstB64 = null, flfFirstName = null, flfFirstUrl = null, flfLastB64 = null, flfLastName = null, flfLastUrl = null;
 $('flfFirst').addEventListener('change', e => {
   const f = e.target.files[0]; if (!f) return;
   const r = new FileReader();
-  r.onload = () => { flfFirstB64 = r.result.split(',')[1]; flfFirstName = f.name; $('flfFirstPrev').innerHTML = '<img src="' + r.result + '">'; $('clrFlfFirst').classList.remove('hidden'); };
+  r.onload = () => { flfFirstB64 = r.result.split(',')[1]; flfFirstName = f.name; flfFirstUrl = r.result; $('clrFlfFirst').classList.remove('hidden'); refreshCrops(); };
   r.readAsDataURL(f);
 });
 $('flfLast').addEventListener('change', e => {
   const f = e.target.files[0]; if (!f) return;
   const r = new FileReader();
-  r.onload = () => { flfLastB64 = r.result.split(',')[1]; flfLastName = f.name; $('flfLastPrev').innerHTML = '<img src="' + r.result + '">'; $('clrFlfLast').classList.remove('hidden'); };
+  r.onload = () => { flfLastB64 = r.result.split(',')[1]; flfLastName = f.name; flfLastUrl = r.result; $('clrFlfLast').classList.remove('hidden'); refreshCrops(); };
   r.readAsDataURL(f);
 });
+
+// ---------- 画像と画面の形合わせ（v3.10.5） ----------
+// 🖼️画像を動かす・🎬始点→終点の画像は、生成エンジン側で出力解像度へ「引き伸ばし」されるため、
+// 画面の形（縦長など）と違う形の画像をそのまま送ると潰れて変形する。送信前に中央を切り抜いて形を合わせる。
+const ASPECT_NUM = { '16:9': 16 / 9, '9:16': 9 / 16, '1:1': 1 };
+const ASPECT_JA = { '16:9': '横長', '9:16': '縦長', '1:1': '正方形' };
+const cropped = { img: null, flfFirst: null, flfLast: null };  // {b64, url, shape} / 加工不要ならnull
+
+function shapeJa(r) { return r > 1.05 ? '横長' : r < 0.95 ? '縦長' : 'ほぼ正方形'; }
+
+function cropToAspect(url, a) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const t = ASPECT_NUM[a] || 16 / 9, r = img.width / img.height;
+      if (Math.abs(r - t) / t < 0.03) { resolve(null); return; }  // 形がほぼ同じなら無加工
+      let w = img.width, h = img.height, x = 0, y = 0;
+      if (r > t) { w = Math.round(img.height * t); x = Math.round((img.width - w) / 2); }
+      else { h = Math.round(img.width / t); y = Math.round((img.height - h) / 2); }
+      const scale = Math.min(1, 2048 / Math.max(w, h));  // 巨大画像はアップロードが重いだけなので縮小
+      const ow = Math.max(1, Math.round(w * scale)), oh = Math.max(1, Math.round(h * scale));
+      const c = document.createElement('canvas');
+      c.width = ow; c.height = oh;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, ow, oh);  // 透過PNGはJPEG化で黒くなるため白地を敷く
+      ctx.drawImage(img, x, y, w, h, 0, 0, ow, oh);
+      const out = c.toDataURL('image/jpeg', 0.95);
+      resolve({ b64: out.split(',')[1], url: out, shape: shapeJa(r) });
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
+function cropNote(shape) {
+  return '<div class="hint" style="margin-top:6px;text-align:left">✂️ 画像が<b>' + shape + '</b>・画面が<b>' +
+    (ASPECT_JA[aspect] || aspect) + '</b>のため、<b>中央をこの範囲で切り抜いて</b>使います（引き伸ばしで変形するのを防止）。<br>' +
+    '画像の全体を使いたいときは、上の「画面」を画像と同じ形にしてください。</div>';
+}
+
+async function refreshCrops() {
+  if (imgUrl) {
+    cropped.img = await cropToAspect(imgUrl, aspect);
+    $('preview').innerHTML = cropped.img
+      ? '<img src="' + cropped.img.url + '">' + cropNote(cropped.img.shape)
+      : '<img src="' + imgUrl + '">';
+  } else cropped.img = null;
+  if (flfFirstUrl) {
+    cropped.flfFirst = await cropToAspect(flfFirstUrl, aspect);
+    $('flfFirstPrev').innerHTML = cropped.flfFirst
+      ? '<img src="' + cropped.flfFirst.url + '">' + cropNote(cropped.flfFirst.shape)
+      : '<img src="' + flfFirstUrl + '">';
+  } else cropped.flfFirst = null;
+  if (flfLastUrl) {
+    cropped.flfLast = await cropToAspect(flfLastUrl, aspect);
+    $('flfLastPrev').innerHTML = cropped.flfLast
+      ? '<img src="' + cropped.flfLast.url + '">' + cropNote(cropped.flfLast.shape)
+      : '<img src="' + flfLastUrl + '">';
+  } else cropped.flfLast = null;
+}
+
+function cropName(nm) { return (nm || 'image').replace(/\.[^.]+$/, '') + '_crop.jpg'; }
 
 let contVideoB64 = null, contVideoName = null;
 $('contVideo').addEventListener('change', e => {
@@ -1202,6 +1264,7 @@ $('refFiles').addEventListener('change', e => {
 function setAspect(a) {
   aspect = a;
   document.querySelectorAll('#aspectSeg button').forEach(b => b.classList.toggle('sel', b.dataset.a === a));
+  refreshCrops();
 }
 function updateSec() {
   const s = $('seconds').value;
@@ -1238,12 +1301,13 @@ function loadImage(f) {
   const r = new FileReader();
   r.onload = () => {
     imgB64 = r.result.split(',')[1];
+    imgUrl = r.result;
     $('preview').innerHTML = '<img src="' + r.result + '">';
     $('clrImg').classList.remove('hidden');
     const img = new Image();
     img.onload = () => {
       const ratio = img.width / img.height;
-      setAspect(ratio > 1.3 ? '16:9' : ratio < 0.77 ? '9:16' : '1:1');
+      setAspect(ratio > 1.3 ? '16:9' : ratio < 0.77 ? '9:16' : '1:1');  // setAspect内で切り抜きも更新される
     };
     img.src = r.result;
   };
@@ -1380,10 +1444,12 @@ function buildPayload() {
   return {
     mode, prompt: $('prompt').value.trim(), seconds: +$('seconds').value, aspect,
     auto_stop: $('autoStop').checked,
-    image_b64: mode === 'i2v' ? imgB64 : mode === 'flf2v' ? flfFirstB64 : null,
-    image_name: mode === 'flf2v' ? flfFirstName : imgName,
-    last_image_b64: mode === 'flf2v' ? flfLastB64 : null,
-    last_image_name: flfLastName,
+    image_b64: mode === 'i2v' ? (cropped.img ? cropped.img.b64 : imgB64)
+             : mode === 'flf2v' ? (cropped.flfFirst ? cropped.flfFirst.b64 : flfFirstB64) : null,
+    image_name: mode === 'flf2v' ? (cropped.flfFirst ? cropName(flfFirstName) : flfFirstName)
+              : (cropped.img ? cropName(imgName) : imgName),
+    last_image_b64: mode === 'flf2v' ? (cropped.flfLast ? cropped.flfLast.b64 : flfLastB64) : null,
+    last_image_name: cropped.flfLast ? cropName(flfLastName) : flfLastName,
     ref_images: mode === 'r2v' ? refImages : mode === 'edit' ? editImages : null,
     ref_video_b64: mode === 'edit' ? refVideoB64 : null,
     ref_video_name: refVideoName,
@@ -1450,6 +1516,7 @@ function validateInputs() {
 
 async function previewPrompt() {
   if (!validateInputs()) return;
+  await refreshCrops();
   try {
     const r = await api('/api/preview', { method: 'POST', body: JSON.stringify(buildPayload()) });
     $('pvMode').innerHTML = '使用エンジン：<b>' + r.mode_label + '</b>' + (r.mode === 'r2v' && mode === 't2v' ? '（エレメント・絵コンテ使用のため自動切替）' : '');
@@ -1489,6 +1556,7 @@ async function generate() {
   if (generating) return;
   if (!validateInputs()) return;
   if (!confirmStoryboardUse()) return;
+  await refreshCrops();  // 画面の形を変えた直後でも、必ず最新の切り抜きを送る
   // 重い設定のときは、始める前に所要時間と費用を知らせる（タイムアウト・課金事故の防止）
   const est = estimateMinutes();
   if (est >= 25) {
