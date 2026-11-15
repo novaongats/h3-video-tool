@@ -18,7 +18,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "3.10.2"
+SELF_VERSION = "3.10.3"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -122,9 +122,30 @@ class RunPodError(Exception):
     pass
 
 
+# RunPod APIの回数制限は「1分11回・1時間225回・1日2700回」。
+# 1時間枠を使い切ると最大1時間ロックされるので、当たったら解除時刻まで一切呼ばない
+# （制限中に呼び続けると復帰がさらに遅れる）。
+RATE_LIMIT = {"until": 0.0}
+
+
+def rate_limit_left():
+    """回数制限中なら解除までの残り秒数、そうでなければ0"""
+    return max(0.0, RATE_LIMIT["until"] - time.time())
+
+
+def rate_limit_msg():
+    left = rate_limit_left()
+    if left <= 0:
+        return ""
+    return (f"RunPodの問い合わせ回数の上限に達しました（複数のPCで同時に開くと起きます）。"
+            f"あと約{int(left // 60) + 1}分で自動回復します。")
+
+
 def runpod_call(cfg, path, method="GET", body=None):
     if not cfg.get("api_key"):
         raise RunPodError("APIキーが未設定です")
+    if rate_limit_left() > 0:
+        raise RunPodError("RunPod APIエラー 429: " + rate_limit_msg())
     url = RUNPOD_BASE + path
     # APIキーは全員で共有のため、RunPodの回数制限(429)に当たりやすい。
     # 起動・停止などの操作(POST)は429でも20秒待って自動再試行する（生成を失敗で止めない）
@@ -140,9 +161,18 @@ def runpod_call(cfg, path, method="GET", body=None):
             detail = e.read().decode("utf-8", "replace")[:500]
             if e.code == 401:
                 raise RunPodError("APIキーが正しくありません（401）")
-            if e.code == 429 and method == "POST" and attempt < 2:
-                time.sleep(20)
-                continue
+            if e.code == 429:
+                # ヘッダの retry-after に「解除まで何秒か」が入っている
+                try:
+                    wait = int(e.headers.get("retry-after") or 0)
+                except (TypeError, ValueError):
+                    wait = 0
+                if wait <= 70 and method == "POST" and attempt < 2:
+                    # 1分枠に当たっただけ → 待って再試行（生成を失敗で止めない）
+                    time.sleep(max(20, wait + 2))
+                    continue
+                RATE_LIMIT["until"] = time.time() + min(3600, max(60, wait))
+                raise RunPodError("RunPod APIエラー 429: " + rate_limit_msg())
             raise RunPodError(f"RunPod APIエラー {e.code}: {detail}")
         except urllib.error.URLError as e:
             raise RunPodError(f"RunPodに接続できません: {e.reason}")
@@ -211,7 +241,7 @@ BALANCE_CACHE = {"t": 0.0, "data": None}
 def get_balance(cfg):
     """RunPodの残高を取得（60秒キャッシュ）。失敗時はNone。"""
     now = time.time()
-    if now - BALANCE_CACHE["t"] < 60:
+    if now - BALANCE_CACHE["t"] < 300:
         return BALANCE_CACHE["data"]
     try:
         q = json.dumps({"query": "query { myself { clientBalance currentSpendPerHr } }"}).encode()
@@ -225,7 +255,7 @@ def get_balance(cfg):
         BALANCE_CACHE["data"] = {"usd": round(float(d["clientBalance"]), 2),
                                  "spend_per_hr": float(d.get("currentSpendPerHr") or 0)}
     except Exception:
-        BALANCE_CACHE["t"] = now - 50  # 失敗時は10秒後に再試行
+        BALANCE_CACHE["t"] = now - 270  # 失敗時は30秒後に再試行
     return BALANCE_CACHE["data"]
 
 
@@ -239,21 +269,43 @@ def pod_status(cfg):
 # Pod状態の20秒キャッシュ。画面は数秒おきに状態を聞いてくるが、
 # 全PCが同じAPIキーを使うため、素通しにするとRunPodの回数制限(429)で全員が止まる
 POD_CACHE = {"t": 0.0, "v": None}
+# 直近に取れた正常な状態を長めに覚えておく。RunPodが一時的に答えないだけのときに
+# 画面へ「ERROR」と出して利用者を不安にさせないため（生成は別経路なので動く）
+POD_LAST_GOOD = {"t": 0.0, "v": None}
+# 失敗が続くときは問い合わせ間隔を伸ばす（回数制限をこれ以上悪化させない）
+POD_FAIL = {"n": 0, "t": 0.0, "msg": ""}
 
 
-def pod_status_cached(cfg, max_age=20):
+def pod_status_cached(cfg, max_age=90):
     now = time.time()
+    # 停止中は急いで確認する必要がないので、さらに間隔を空ける
+    # （1日の上限2700回に、3台つけっぱなしでも収まるようにするため）
+    if POD_CACHE["v"] in ("EXITED", "MISSING"):
+        max_age = 180
     if POD_CACHE["v"] is not None and now - POD_CACHE["t"] < max_age:
         return POD_CACHE["v"]
     try:
         v = pod_status(cfg)
         POD_CACHE["t"], POD_CACHE["v"] = now, v
+        POD_LAST_GOOD["t"], POD_LAST_GOOD["v"] = now, v
         return v
     except RunPodError as e:
         if "429" in str(e) and POD_CACHE["v"] is not None:
-            POD_CACHE["t"] = now - max_age + 10  # 10秒後にもう一度だけ取りに行く
+            POD_CACHE["t"] = now - max_age + 30  # 30秒後にもう一度だけ取りに行く
             return POD_CACHE["v"]
         raise
+
+
+COMFY_CACHE = {"t": 0.0, "v": False}
+
+
+def comfy_alive_cached(cfg, max_age=15):
+    now = time.time()
+    if now - COMFY_CACHE["t"] < max_age:
+        return COMFY_CACHE["v"]
+    COMFY_CACHE["t"] = now
+    COMFY_CACHE["v"] = comfy_alive(cfg, timeout=5)
+    return COMFY_CACHE["v"]
 
 
 def comfy_alive(cfg, timeout=8):
@@ -436,6 +488,14 @@ def ensure_pod_running(cfg):
             "【接続エラー】このPCの生成エンジン（ComfyUI）に接続できません。"
             "ComfyUIを起動してから、もう一度お試しください"
             f"（接続先: {cfg.get('comfy_url')}）")
+    # すでに生成エンジンが応答しているなら、RunPodに問い合わせる必要はない。
+    # 問い合わせ回数の上限に当たっていても生成を始められるようにするため。
+    if comfy_alive(cfg, timeout=6):
+        return
+    if rate_limit_left() > 0:
+        raise RunPodError(
+            "【一時的に起動できません】" + rate_limit_msg()
+            + "回復後にもう一度「生成」を押してください。")
     pod = resolve_pod(cfg)  # 他のPCがPodを作り直していても自動で追従する
     st = pod.get("desiredStatus") if pod else "MISSING"
     if st != "RUNNING":
@@ -1404,24 +1464,65 @@ class Handler(BaseHTTPRequestHandler):
                 out["pod"] = "NO_KEY"
             else:
                 out["balance"] = get_balance(cfg)
-                try:
-                    out["pod"] = pod_status_cached(cfg)
-                except RunPodError as e:
-                    if "429" in str(e):
-                        # 回数制限中にPod探し直しへ行くとAPI呼び出しが雪だるま式に増えるので行かない
-                        out["pod"] = "ERROR"
-                        out["pod_error"] = ("RunPodが混み合っています（複数PCで同時に使うと起きます）。"
-                                            "数十秒で自動回復するのでそのままお待ちください")
+                now = time.time()
+                st, err = None, ""
+
+                # ① まず動画生成エンジン(ComfyUI)へ直接きく。
+                #    RunPodの回数制限とは無関係なので、制限中でも正しく判定できる。
+                engine_up = comfy_alive_cached(cfg)
+                if engine_up:
+                    st = "RUNNING"
+                    POD_CACHE["t"], POD_CACHE["v"] = now, st
+
+                # ② エンジンが応答しないときだけRunPodに状態を聞く
+                elif rate_limit_left() > 0:
+                    # 制限中は状態が分からない。古い状態を出すと誤解を招くので出さない。
+                    out["pod"] = "ERROR"
+                    out["pod_error"] = (rate_limit_msg()
+                                        + "回復するまでGPUサーバーの起動はできません。")
+                    self._send(200, out)
+                    return
+                else:
+                    backoff = min(120, 10 * POD_FAIL["n"])
+                    if POD_FAIL["n"] and now - POD_FAIL["t"] < backoff:
+                        err = POD_FAIL["msg"]
                     else:
-                        # Podが作り直されてIDが変わった可能性 → ボリュームから探し直す
                         try:
-                            pod = resolve_pod(cfg)
-                            out["pod"] = pod.get("desiredStatus", "UNKNOWN") if pod else "MISSING"
-                            if pod:
-                                POD_CACHE["t"], POD_CACHE["v"] = time.time(), out["pod"]
-                        except RunPodError as e2:
-                            out["pod"] = "ERROR"
-                            out["pod_error"] = str(e2)
+                            st = pod_status_cached(cfg)
+                            # RunPodは起動中だがエンジンがまだ応答しない＝準備中
+                            if st == "RUNNING":
+                                st = "STARTING"
+                        except RunPodError as e:
+                            if "429" in str(e):
+                                # 回数制限中にPod探し直しへ行くと呼び出しが雪だるま式に増えるので行かない
+                                err = rate_limit_msg() or str(e)
+                            else:
+                                # Podが作り直されてIDが変わった可能性 → ボリュームから探し直す
+                                try:
+                                    pod = resolve_pod(cfg)
+                                    st = pod.get("desiredStatus", "UNKNOWN") if pod else "MISSING"
+                                    if pod:
+                                        POD_CACHE["t"], POD_CACHE["v"] = now, st
+                                except RunPodError as e2:
+                                    err = str(e2)
+                        if st is not None:
+                            POD_FAIL["n"] = 0
+                        else:
+                            POD_FAIL["n"] += 1
+                            POD_FAIL["t"], POD_FAIL["msg"] = now, err
+
+                if st is not None:
+                    POD_LAST_GOOD["t"], POD_LAST_GOOD["v"] = now, st
+                    out["pod"] = st
+                elif (rate_limit_left() <= 0 and POD_LAST_GOOD["v"] is not None
+                      and now - POD_LAST_GOOD["t"] < 1800):
+                    # 少し前まで取れていた状態をそのまま表示する（真っ赤なエラーより親切）
+                    out["pod"] = POD_LAST_GOOD["v"]
+                    out["pod_note"] = (err
+                                       or "RunPodへの状態確認が一時的にできません（表示は少し前の状態です）")
+                else:
+                    out["pod"] = "ERROR"
+                    out["pod_error"] = err or "RunPodに接続できません"
             self._send(200, out)
         elif path == "/api/qc":
             self._send(200, {"available": qc_available(),
@@ -1682,7 +1783,12 @@ def main():
         os.environ["H3_NO_UPDATE"] = "1"  # 再起動ループ防止
         os.execv(sys.executable, [sys.executable, os.path.abspath(__file__)])
     try:
-        server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+        # Windowsは既定だと2つ目も同じポートに居座れてしまい、
+        # 古い方が応答して「直したはずが直っていない」状態になる。確実に弾く。
+        class _Server(ThreadingHTTPServer):
+            allow_reuse_address = False
+
+        server = _Server(("127.0.0.1", PORT), Handler)
     except OSError:
         # すでに起動済み → 画面だけ開いて終了
         print("すでに起動しています。ブラウザで画面を開きます。")

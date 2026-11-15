@@ -44,6 +44,9 @@
     mask-image:radial-gradient(ellipse 85% 65% at 50% -5%, #000 0%, transparent 72%);
   }
   .hidden { display:none !important; }
+  .podbar { margin:0; padding:9px 22px; font-size:12.5px; line-height:1.6;
+            border-bottom:1px solid var(--line); background:rgba(245,196,99,.1); color:var(--warn); }
+  .podbar.bad { background:rgba(255,107,129,.1); color:var(--ng); }
   a { color:var(--ac2); text-decoration:none; }
 
   /* ---------- レイアウト ---------- */
@@ -313,6 +316,7 @@
       <button class="btn-stop" id="btnStop" onclick="podStop()">■ 停止</button>
       <span class="pill" id="balancePill" style="display:none;margin-left:auto">💰 <span id="balanceText"></span></span>
     </header>
+    <div class="podbar hidden" id="podBar"></div>
 
     <div class="content">
 
@@ -1476,7 +1480,25 @@ async function poll() {
     else if (pod === 'RUNNING') { led.className = 'led on'; txt.textContent = '起動中（課金中 約500円/時）'; }
     else if (pod === 'EXITED') { led.className = 'led off'; txt.textContent = '停止中（課金なし）'; }
     else if (pod === 'NO_KEY') { txt.textContent = 'APIキー未設定（設定ページへ）'; }
+    else if (pod === 'STARTING') { led.className = 'led busy'; txt.textContent = '起動の準備中…'; }
+    else if (pod === 'MISSING') { led.className = 'led off'; txt.textContent = '⚠️ GPUサーバーが見つかりません'; }
+    else if (pod === 'ERROR') { led.className = 'led off'; txt.textContent = '⚠️ 状態を確認できません'; }
     else { led.className = 'led busy'; txt.textContent = pod; }
+
+    // 「ERROR」の一言だけだと何が起きたか分からないので、理由と対処を帯で出す
+    const bar = $('podBar');
+    if (s.pod_error) {
+      bar.className = 'podbar bad';
+      bar.textContent = '⚠️ ' + s.pod_error;
+    } else if (s.pod_note) {
+      bar.className = 'podbar';
+      bar.textContent = 'ℹ️ ' + s.pod_note;
+    } else if (pod === 'MISSING') {
+      bar.className = 'podbar bad';
+      bar.textContent = '⚠️ GPUサーバーが見つかりません。ほかの人が作り直した可能性があります。少し待っても直らなければ管理者に連絡してください。';
+    } else {
+      bar.className = 'podbar hidden';
+    }
     $('btnStart').disabled = (pod === 'RUNNING');
     $('btnStop').disabled = (pod === 'EXITED');
 
