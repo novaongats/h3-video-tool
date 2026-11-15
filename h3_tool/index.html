@@ -1219,7 +1219,19 @@ async function pasteFromGPTs() {
 
 function applyGPTs(text) {
   const applied = [];
-  const lines = text.replace(/\r/g, '').split('\n');
+  const lines0 = text.replace(/\r/g, '').split('\n');
+  // 「＝＝＝セリフ＝＝＝」ブロック（1行1セリフの複数行形式）を先に抜き出す
+  let dlgBlock = null;
+  const lines = [];
+  for (let i = 0; i < lines0.length; i++) {
+    if (dlgBlock === null && /^[＝=]{2,}\s*セリフ\s*[＝=]{2,}$/.test(lines0[i].trim())) {
+      dlgBlock = [];
+      for (i++; i < lines0.length && !/^[＝=]{2,}/.test(lines0[i].trim()); i++) dlgBlock.push(lines0[i]);
+      i--; // 終端の＝＝＝行（プロンプト本文マーカー等）は通常処理に戻す
+      continue;
+    }
+    lines.push(lines0[i]);
+  }
   let promptStart = -1, promptEnd = lines.length;
   lines.forEach((l, i) => {
     if (promptStart < 0 && /プロンプト(本文|ここから)/.test(l)) promptStart = i + 1;
@@ -1253,6 +1265,11 @@ function applyGPTs(text) {
   else if (/横/.test(asp)) { setAspect('16:9'); applied.push('横長'); }
 
   const d = get('セリフ'); if (d !== undefined) { $('dialogue').value = empty(d) ? '' : d; if (!empty(d)) applied.push('セリフあり'); }
+  if (dlgBlock) {
+    const dv = dlgBlock.map(x => x.trim()).filter(x => x && !empty(x)).join('\n');
+    $('dialogue').value = dv;
+    if (dv) applied.push('セリフ' + dv.split('\n').length + '行');
+  }
   const v = get('声', '声の感じ'); if (v !== undefined) $('voice').value = empty(v) ? '' : v;
   const b = get('BGM'); if (b !== undefined) { $('bgm').value = empty(b) ? '' : b; }
   const se = get('効果音', '環境音'); if (se !== undefined) $('se').value = empty(se) ? '' : se;
