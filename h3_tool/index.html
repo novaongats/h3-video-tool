@@ -866,13 +866,15 @@ function setMode(m) {
 
 // ---------- 絵コンテ ----------
 let sbImages = [];
+let sbUrls = [];   // プレビュー表示用。サーバーへは送らない
 $('sbFiles').addEventListener('change', e => {
-  sbImages = []; $('sbPreview').innerHTML = '';
+  sbImages = []; sbUrls = []; $('sbPreview').innerHTML = '';
   const files = [...e.target.files].slice(0, 6);
   files.forEach((f, k) => {
     const r = new FileReader();
     r.onload = () => {
       sbImages.push({ name: f.name, b64: r.result.split(',')[1] });
+      sbUrls.push(r.result);
       const w = document.createElement('div');
       w.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:3px';
       w.innerHTML = '<img src="' + r.result + '" style="max-height:70px;border-radius:8px;margin:0">' +
@@ -884,7 +886,7 @@ $('sbFiles').addEventListener('change', e => {
     r.readAsDataURL(f);
   });
 });
-function clearSb() { sbImages = []; $('sbPreview').innerHTML = ''; $('sbFiles').value = ''; $('clrSb').classList.add('hidden'); updateSbHint(); }
+function clearSb() { sbImages = []; sbUrls = []; $('sbPreview').innerHTML = ''; $('sbFiles').value = ''; $('clrSb').classList.add('hidden'); updateSbHint(); }
 function updateSbHint() {
   const n = sbImages.length;
   $('sbHint').textContent = n === 0
@@ -892,6 +894,45 @@ function updateSbHint() {
     : n === 1
     ? '🎬 コンテシートモード：この1枚に並んだコマを左上→右下の順に読み取って構成します。1コマ＝1枚で分けるとさらに精度が上がります。'
     : '🎬 ' + n + 'カット構成 → おすすめの長さ: ' + Math.min(15, n * 3) + '〜' + Math.min(15, n * 4) + '秒。プロンプトに「カット1では〜」とカットごとの内容を書くと精度が上がります。';
+}
+
+// 絵コンテ欄の写真1枚を「最初のフレーム」と思い込む取り違えを、生成前に止める。
+// 絵コンテ欄は「コマが並んだシート」を読む欄で、1枚の写真を動かす機能はない。
+const FIRSTFRAME_RE = /最初のフレーム|最初のコマ|1枚目|一枚目|添付(した)?(画像|写真)を(最初|起点|スタート|そのまま)|この(画像|写真)を(動か|そのまま)|画像から動か/;
+
+function sbToFirstFrame() {
+  const b64 = sbImages[0].b64, nm = sbImages[0].name, url = sbUrls[0];
+  clearSb();
+  setMode('i2v');
+  imgB64 = b64; imgName = nm;
+  $('preview').innerHTML = '<img src="' + url + '">';
+  $('clrImg').classList.remove('hidden');
+  const im = new Image();
+  im.onload = () => {
+    const r = im.width / im.height;
+    setAspect(r > 1.3 ? '16:9' : r < 0.77 ? '9:16' : '1:1');
+  };
+  im.src = url;
+}
+
+function confirmStoryboardUse() {
+  if (!['t2v', 'r2v'].includes(mode) || sbImages.length !== 1) return true;
+  if (!FIRSTFRAME_RE.test($('prompt').value)) return true;
+  const go = confirm(`🎬絵コンテ欄に画像が1枚だけ入っていますが、本文には「この画像から動かしたい」と書かれています。
+
+絵コンテ欄は「コマが並んだ絵コンテシート」を読み取るための欄です。
+写真や画像を1枚そのまま動かしたいときは「🖼️画像を動かす」を使ってください。
+
+［OK］　　　　コマが並んだ絵コンテなので、このまま進む
+［キャンセル］画像を動かしたいので「🖼️画像を動かす」に切り替える
+　　　　　　　（画像はそのまま引き継ぎます）`);
+  if (go) return true;
+  sbToFirstFrame();
+  alert(`「🖼️画像を動かす」に切り替えました。画像はそのまま引き継いでいます。
+
+本文の「添付画像を最初のフレームとして使用」のような一文は消してください。
+このモードでは自動で指定されるので、書くと二重指示になります。`);
+  return false;
 }
 
 // ---------- @入力補完（エレメント名のオートコンプリート） ----------
@@ -1447,6 +1488,7 @@ async function cancelGeneration() {
 async function generate() {
   if (generating) return;
   if (!validateInputs()) return;
+  if (!confirmStoryboardUse()) return;
   // 重い設定のときは、始める前に所要時間と費用を知らせる（タイムアウト・課金事故の防止）
   const est = estimateMinutes();
   if (est >= 25) {
