@@ -18,7 +18,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "3.8.1"
+SELF_VERSION = "3.9.0"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -566,7 +566,7 @@ def compose_prompt(p):
                 out_lines.append(
                     f"{time_en}{who} says in an off-screen voiceover: "
                     f"<d>[Japanese] {text}</d> "
-                    "While this voiceover plays, every on-screen character's lips remain completely closed.")
+                    "while every on-screen character's lips remain completely closed.")
             else:
                 key = nm or "__main__"
                 s = speaker_id(key)
@@ -588,8 +588,12 @@ def compose_prompt(p):
             block += f"\nVoice casting note (Japanese): {v}"
         parts.append(block)
         parts.append(
-            "The only spoken words in this video are the lines inside the <d> tags above. "
-            "Do not add any other dialogue, narration, commentary, or voice-over. "
+            "The only spoken words in this video are the lines inside the <d> tags above, "
+            "spoken exactly as written: preserve every Japanese word and punctuation mark verbatim. "
+            "Do not add, translate, paraphrase, improvise, or repeat any line. "
+            "Do not add any other dialogue, narration, commentary, or voice-over before, between, "
+            "or after these lines; when not speaking, every speaker keeps their lips closed and "
+            "remains silent. "
             "Any quoted phrases inside the scene description are acting directions, not extra speech. "
             "All speech must be natural, fluent Japanese with native pronunciation — "
             "never Chinese and never English.")
@@ -635,6 +639,11 @@ def compose_prompt(p):
     else:
         music = "N/A"
     parts.append("non_diegetic_music: " + music)
+
+    # 公式Context-IRと同じ3大セクション形式に合わせ、本文に正式なセクション名を付ける
+    # （overall_soundscape / non_diegetic_music と並ぶ、H3本来の入力形式の第1セクション）
+    if parts[0] and "integrated_multimodal_description" not in parts[0]:
+        parts[0] = "integrated_multimodal_description:\n" + parts[0]
 
     return "\n\n".join(x for x in parts if x)
 
@@ -780,6 +789,17 @@ def plan_generation(params, elements):
                            "動き、カメラワーク、構図、シーンの進行、タイミング、背景、照明はすべて<Video 1>から"
                            f"継承し、新しい動きを追加しない。{target}{voice_rule}\n\n"
                            "変更の指示: " + prompt_text)
+    # 公式プロンプトガイド指定のキーフレーム整合宣言（最終プロンプトの先頭行に置く決まり）
+    if mode == "i2v":
+        prompt_text = ("For the target video, at 0.00 seconds into the target video, "
+                       "<Picture 1> (from [Shot 1]) is fully referenced.\n\n" + prompt_text)
+    elif mode == "flf2v":
+        sec_f = float(params.get("seconds", 5))
+        prompt_text = ("How the reference pictures align with the target video — "
+                       "Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; "
+                       f"Picture 2 (from Shot 1) aligns with the {sec_f:.2f}-second mark "
+                       "of the target video.\n\n" + prompt_text)
+
     if mode == "continue":
         prompt_text = (
             "This video is a direct continuation of a previous clip. It starts exactly from the "
