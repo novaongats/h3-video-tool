@@ -522,6 +522,8 @@
             <option value="no_bgm">BGMなし</option>
           </select>
           <div class="hint">勝手にナレーションが入るときは「🔇 しゃべらせない」を。</div>
+          <label class="lbl">🧪 セリフ自動チェック</label>
+          <div id="qcArea"><div class="hint">読み込み中…</div></div>
         </details>
 
         <details open>
@@ -1335,8 +1337,41 @@ function buildPayload() {
     bgm: $('bgm').value, se: $('se').value, mix: $('mix').value,
     quality_mp: $('qualityMp').value, steps: $('steps').value,
     seed: $('seed').value, no_text: $('noText').checked,
+    qc_check: $('qcCheck') ? $('qcCheck').checked : false,
+    qc_retry: $('qcRetry') ? $('qcRetry').checked : false,
   };
 }
+
+// ---------- 🧪セリフ自動チェック（完成動画の音声をこのPCで文字起こしして台本と照合） ----------
+async function refreshQc() {
+  try {
+    const q = await api('/api/qc');
+    const el = $('qcArea');
+    if (q.available) {
+      if (!$('qcCheck')) {
+        el.innerHTML =
+          '<label class="sw"><input type="checkbox" id="qcCheck" checked><span class="tr"></span>' +
+          '<span>生成後にセリフをチェック<br><small>完成動画の音声をこのPCで文字起こしして、台本どおり話せたか判定（無料・約10〜60秒）</small></span></label>' +
+          '<label class="sw"><input type="checkbox" id="qcRetry"><span class="tr"></span>' +
+          '<span>不一致なら自動で作り直す（最大2回）<br><small>⚠️作り直しのたびに通常と同じ生成時間とGPU料金がかかります</small></span></label>';
+      }
+    } else if (q.installing) {
+      el.innerHTML = '<div class="hint">⏳ ' + (q.log || '準備中…') + '</div>';
+      setTimeout(refreshQc, 4000);
+    } else {
+      el.innerHTML =
+        '<button style="font-size:12px;padding:7px 12px" onclick="qcInstall()">🧪 セリフ自動チェックを使えるようにする</button>' +
+        '<div class="hint">「台本どおり話せたか」を完成のたびに自動判定し、崩れていたら警告（希望すれば自動で作り直し）。' +
+        '初回のみ部品を約700MBダウンロードします（無料・このPC内で完結・GPUレンタル不要）' +
+        (q.log ? '<br>' + q.log : '') + '</div>';
+    }
+  } catch (e) { }
+}
+async function qcInstall() {
+  try { await api('/api/qc_install', { method: 'POST' }); } catch (e) { alert(e.message); return; }
+  refreshQc();
+}
+refreshQc();
 
 function validateInputs() {
   if (!$('prompt').value.trim()) { alert('動画の内容を入力してください'); return false; }

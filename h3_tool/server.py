@@ -18,7 +18,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "3.9.0"
+SELF_VERSION = "3.10.0"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -508,6 +508,33 @@ def strip_quotes(s):
     return s
 
 
+def parse_dialogue(d):
+    """セリフ欄の各行を解析して (時間帯 or None, 話者名 or None, セリフ本文) のリストを返す。
+    時間帯の例: 「0.0～2.0秒：」「【2-5秒】」「0〜3秒 」など（→ 同一話者の時間指定として扱う。
+      旧版はこれを「話者名」と誤認して行ごとに別人(S1,S2,S3…)を割り当てるバグがあった）"""
+    time_re = re.compile(
+        r"^【?\s*(\d+(?:\.\d+)?)\s*[〜～\-−–~]\s*(\d+(?:\.\d+)?)\s*秒?\s*】?[：:。、\s]*")
+    name_re = re.compile(r"^@?([^：:\d\s][^：:]{0,9}?)\s*[：:]\s*(.+)$")
+    entries = []
+    for ln in (x.strip() for x in (d or "").splitlines()):
+        if not ln:
+            continue
+        t = None
+        tm = time_re.match(ln)
+        if tm and tm.end() < len(ln):
+            t = (tm.group(1), tm.group(2))
+            ln = ln[tm.end():].strip()
+        name = None
+        nm = name_re.match(ln)
+        if nm and (ln.startswith("@") or nm.group(1).strip() in NARRATOR_NAMES):
+            name, ln = nm.group(1).strip().lstrip("@"), nm.group(2).strip()
+        # セリフを囲むカギカッコ・引用符は除去（公式ルール: <d>内は話す言葉そのものだけ）
+        ln = strip_quotes(ln)
+        if ln:
+            entries.append((t, name, ln))
+    return entries
+
+
 def compose_prompt(p):
     """フォームの各欄から、MiniMax公式プロンプトガイド準拠の形式に組み立てる。
     公式形式: 本文（Shot構成・話者ID・<d>タグのセリフ） + overall_soundscape + non_diegetic_music
@@ -518,29 +545,7 @@ def compose_prompt(p):
     d = p.get("dialogue", "").strip()
     if d:
         v = p.get("voice", "").strip()
-        # --- 各行を解析: [時間帯] [@話者名:] セリフ本文 ---
-        # 時間帯の例: 「0.0～2.0秒：」「【2-5秒】」「0〜3秒 」など（→ 同一話者の時間指定として扱う。
-        #   旧版はこれを「話者名」と誤認して行ごとに別人(S1,S2,S3…)を割り当てるバグがあった）
-        time_re = re.compile(
-            r"^【?\s*(\d+(?:\.\d+)?)\s*[〜～\-−–~]\s*(\d+(?:\.\d+)?)\s*秒?\s*】?[：:。、\s]*")
-        name_re = re.compile(r"^@?([^：:\d\s][^：:]{0,9}?)\s*[：:]\s*(.+)$")
-        entries = []  # (time(start,end) or None, 話者名 or None, セリフ)
-        for ln in (x.strip() for x in d.splitlines()):
-            if not ln:
-                continue
-            t = None
-            tm = time_re.match(ln)
-            if tm and tm.end() < len(ln):
-                t = (tm.group(1), tm.group(2))
-                ln = ln[tm.end():].strip()
-            name = None
-            nm = name_re.match(ln)
-            if nm and (ln.startswith("@") or nm.group(1).strip() in NARRATOR_NAMES):
-                name, ln = nm.group(1).strip().lstrip("@"), nm.group(2).strip()
-            # セリフを囲むカギカッコ・引用符は除去（公式ルール: <d>内は話す言葉そのものだけ）
-            ln = strip_quotes(ln)
-            if ln:
-                entries.append((t, name, ln))
+        entries = parse_dialogue(d)
 
         # 話者IDは「同じ話者＝同じ番号」で固定（公式ルール。名前なし行はすべて同一のS1）
         sid = {}
@@ -646,6 +651,71 @@ def compose_prompt(p):
         parts[0] = "integrated_multimodal_description:\n" + parts[0]
 
     return "\n\n".join(x for x in parts if x)
+
+
+# ---------- 🧪セリフ検品（生成後の音声をこのPCで文字起こしして台本と照合する） ----------
+# 使用部品: faster-whisper（無料・PC内で完結・GPUレンタル不要）。未導入でもツール本体は動く。
+QC = {"installing": False, "log": "", "model": None}
+
+
+def qc_available():
+    try:
+        import faster_whisper  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+def qc_install_worker():
+    import subprocess
+    try:
+        QC["log"] = "音声認識の部品をダウンロード中…（約250MB・数分かかります）"
+        r = subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "faster-whisper"],
+                           capture_output=True, text=True, timeout=1800)
+        if r.returncode != 0:
+            QC["log"] = "❌ インストール失敗: " + (r.stderr or r.stdout or "")[-300:]
+            return
+        QC["log"] = "音声認識モデルをダウンロード中…（約460MB・初回のみ）"
+        from faster_whisper import WhisperModel
+        QC["model"] = WhisperModel("small", device="cpu", compute_type="int8")
+        QC["log"] = "✅ 準備完了！次の生成からセリフ自動チェックが使えます"
+    except Exception as e:
+        QC["log"] = f"❌ インストール失敗: {type(e).__name__}: {e}"
+    finally:
+        QC["installing"] = False
+
+
+def qc_normalize(s):
+    """表記ゆれを吸収して比較用の文字列にする（全角半角の統一→記号・空白を除去）"""
+    import unicodedata
+    s = unicodedata.normalize("NFKC", s or "")
+    return re.sub(r"[^0-9A-Za-zぁ-ゖァ-ヺ一-鿿ー]", "", s)
+
+
+def qc_verify(video_path, dialogue):
+    """完成動画の音声を文字起こしして台本と照合する。
+    戻り値: {"ok", "score"(一致%), "heard"(聞こえた内容)} / 検品不可ならNone"""
+    try:
+        from faster_whisper import WhisperModel
+    except Exception:
+        return None
+    expected = qc_normalize("".join(t for _, _, t in parse_dialogue(dialogue)))
+    if not expected:
+        return None
+    set_job(message="🧪 セリフを検品中…（このPCで音声を文字起こし。初回はモデル読込で+1分）")
+    try:
+        if QC["model"] is None:
+            QC["model"] = WhisperModel("small", device="cpu", compute_type="int8")
+        segments, _info = QC["model"].transcribe(video_path, language="ja",
+                                                 beam_size=5, vad_filter=True)
+        heard = "".join(seg.text for seg in segments).strip()
+    except Exception as e:
+        return {"ok": True, "score": -1, "heard": "",
+                "note": f"検品を実行できませんでした（{type(e).__name__}）"}
+    import difflib
+    score = int(difflib.SequenceMatcher(None, expected, qc_normalize(heard)).ratio() * 100)
+    # 75%以上で合格（音声認識自体の聞き取りゆれがあるため、100%一致は求めない）
+    return {"ok": score >= 75, "score": score, "heard": heard}
 
 
 CANCEL = {"on": False}   # 生成の中止要求フラグ
@@ -1163,22 +1233,20 @@ def run_generation(params, image_blob, image_name):
             else:
                 audio_note = "（注意：このPCに音声処理ソフトffmpegが無いためAIの音声のままです）"
 
-        if params.get("auto_stop") and not cfg.get("local_mode"):
-            # 他の人（別PC）の生成がキューに残っていたら停止しない
-            others_busy = False
-            try:
-                q = comfy_get(cfg, "/queue", timeout=15)
-                others_busy = bool(q.get("queue_running")) or bool(q.get("queue_pending"))
-            except Exception:
-                pass
-            if others_busy:
-                set_job(message="完成！（他の生成が動作中のためサーバーは停止しません）", video=local_name)
+        # 🧪セリフ検品: 完成動画の音声を文字起こしして台本と照合（有効時のみ・PC内で完結、追加費用なし）
+        qc = None
+        qc_note = ""
+        if params.get("qc_check") and str(params.get("dialogue") or "").strip() \
+                and params.get("mix") not in ("no_speech", "silent"):
+            qc = qc_verify(local_path, params.get("dialogue"))
+        if qc:
+            if qc.get("note"):
+                qc_note = "　🧪" + qc["note"]
+            elif qc["ok"]:
+                qc_note = f"　🧪セリフ検品OK（台本と{qc['score']}%一致）"
             else:
-                set_job(state="stopping_pod", message="サーバーを自動停止しています…", video=local_name)
-                try:
-                    runpod_call(cfg, f"/pods/{cfg['pod_id']}/stop", method="POST")
-                except Exception:
-                    pass
+                qc_note = (f"　⚠️セリフ検品NG（一致{qc['score']}%）。"
+                           f"聞こえた内容:「{(qc['heard'] or '（無音）')[:80]}」")
 
         try:
             report_name = save_report(params, plan, elements, seed, local_name, None)
@@ -1207,8 +1275,41 @@ def run_generation(params, image_blob, image_name):
             "element_ids": element_ids,
             "final_prompt": prompt_text,
             "report": report_name,
+            "qc": qc,
         })
-        set_job(state="done", message="完成！" + audio_note, video=local_name, error=None, report=report_name)
+
+        # 検品NG＋自動リトライON → Podを止めずにシードを変えてもう一度（最大2回）
+        attempt = int(params.get("_qc_attempt") or 0)
+        if qc and not qc["ok"] and params.get("qc_retry") and attempt < 2:
+            p2 = dict(params)
+            p2["_qc_attempt"] = attempt + 1
+            p2["seed"] = ""  # 新しいシードで引き直す
+            set_job(state="generating",
+                    message=f"⚠️セリフが台本と不一致（{qc['score']}%）→ シードを変えて自動で作り直し中"
+                            f"（{attempt + 1}/2回目。失敗テイクも作品一覧に残っています）")
+            return run_generation(p2, image_blob, image_name)
+
+        if params.get("auto_stop") and not cfg.get("local_mode"):
+            # 他の人（別PC）の生成がキューに残っていたら停止しない
+            others_busy = False
+            try:
+                q = comfy_get(cfg, "/queue", timeout=15)
+                others_busy = bool(q.get("queue_running")) or bool(q.get("queue_pending"))
+            except Exception:
+                pass
+            if others_busy:
+                set_job(message="完成！（他の生成が動作中のためサーバーは停止しません）", video=local_name)
+            else:
+                set_job(state="stopping_pod", message="サーバーを自動停止しています…", video=local_name)
+                try:
+                    runpod_call(cfg, f"/pods/{cfg['pod_id']}/stop", method="POST")
+                except Exception:
+                    pass
+
+        done_msg = "完成！" + audio_note + qc_note
+        if qc and not qc["ok"] and not params.get("qc_retry"):
+            done_msg += "（シード値を空にしてもう一度生成すると改善することが多いです）"
+        set_job(state="done", message=done_msg, video=local_name, error=None, report=report_name)
     except RunPodError as e:
         set_job(state="error", message="", error=str(e))
     except urllib.error.HTTPError as e:
@@ -1285,6 +1386,9 @@ class Handler(BaseHTTPRequestHandler):
                         out["pod"] = "ERROR"
                         out["pod_error"] = str(e)
             self._send(200, out)
+        elif path == "/api/qc":
+            self._send(200, {"available": qc_available(),
+                             "installing": QC["installing"], "log": QC["log"]})
         elif path == "/api/history":
             self._send(200, {"history": list(reversed(load_history()))})
         elif path == "/api/elements":
@@ -1342,6 +1446,12 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 save_config(cfg)
                 self._send(200, {"ok": True, "pod": st})
+            elif path == "/api/qc_install":
+                if not qc_available() and not QC["installing"]:
+                    QC["installing"] = True
+                    QC["log"] = "準備を開始しました…"
+                    threading.Thread(target=qc_install_worker, daemon=True).start()
+                self._send(200, {"ok": True})
             elif path == "/api/clear_error":
                 if JOB["state"] == "error":
                     set_job(state="idle", message="", error=None)
