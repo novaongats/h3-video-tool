@@ -1615,7 +1615,7 @@ function restoreEntry(i) {
   loadElems();
   refreshGallery();
   poll();
-  setInterval(poll, 4000);
+  setInterval(poll, 8000);  // 全PCが同じAPIキーでRunPodに状態確認するため間隔は広めに（429対策）
 })();
 </script>
 </body>

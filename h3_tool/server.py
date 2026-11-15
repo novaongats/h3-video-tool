@@ -18,7 +18,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "3.10.1"
+SELF_VERSION = "3.10.2"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -126,17 +126,26 @@ def runpod_call(cfg, path, method="GET", body=None):
     if not cfg.get("api_key"):
         raise RunPodError("APIキーが未設定です")
     url = RUNPOD_BASE + path
-    try:
-        return http_json(url, method=method,
-                         headers={"Authorization": "Bearer " + cfg["api_key"]},
-                         body=body, timeout=60)
-    except urllib.error.HTTPError as e:
-        detail = e.read().decode("utf-8", "replace")[:500]
-        if e.code == 401:
-            raise RunPodError("APIキーが正しくありません（401）")
-        raise RunPodError(f"RunPod APIエラー {e.code}: {detail}")
-    except urllib.error.URLError as e:
-        raise RunPodError(f"RunPodに接続できません: {e.reason}")
+    # APIキーは全員で共有のため、RunPodの回数制限(429)に当たりやすい。
+    # 起動・停止などの操作(POST)は429でも20秒待って自動再試行する（生成を失敗で止めない）
+    for attempt in range(3):
+        try:
+            r = http_json(url, method=method,
+                          headers={"Authorization": "Bearer " + cfg["api_key"]},
+                          body=body, timeout=60)
+            if method == "POST":
+                POD_CACHE["t"] = 0.0  # Podの状態が変わったはずなので次回は取り直す
+            return r
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", "replace")[:500]
+            if e.code == 401:
+                raise RunPodError("APIキーが正しくありません（401）")
+            if e.code == 429 and method == "POST" and attempt < 2:
+                time.sleep(20)
+                continue
+            raise RunPodError(f"RunPod APIエラー {e.code}: {detail}")
+        except urllib.error.URLError as e:
+            raise RunPodError(f"RunPodに接続できません: {e.reason}")
 
 
 NETWORK_VOLUME_ID = "qqvwtszok9"  # 日本(AP-JP-1) minimax-h3-jp
@@ -225,6 +234,26 @@ def pod_status(cfg):
         raise RunPodError("Pod未設定")  # 呼び出し側でresolve_podにフォールバックする
     d = runpod_call(cfg, f"/pods/{cfg['pod_id']}")
     return d.get("desiredStatus", "UNKNOWN")
+
+
+# Pod状態の20秒キャッシュ。画面は数秒おきに状態を聞いてくるが、
+# 全PCが同じAPIキーを使うため、素通しにするとRunPodの回数制限(429)で全員が止まる
+POD_CACHE = {"t": 0.0, "v": None}
+
+
+def pod_status_cached(cfg, max_age=20):
+    now = time.time()
+    if POD_CACHE["v"] is not None and now - POD_CACHE["t"] < max_age:
+        return POD_CACHE["v"]
+    try:
+        v = pod_status(cfg)
+        POD_CACHE["t"], POD_CACHE["v"] = now, v
+        return v
+    except RunPodError as e:
+        if "429" in str(e) and POD_CACHE["v"] is not None:
+            POD_CACHE["t"] = now - max_age + 10  # 10秒後にもう一度だけ取りに行く
+            return POD_CACHE["v"]
+        raise
 
 
 def comfy_alive(cfg, timeout=8):
@@ -1376,15 +1405,23 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 out["balance"] = get_balance(cfg)
                 try:
-                    out["pod"] = pod_status(cfg)
-                except RunPodError:
-                    # Podが作り直されてIDが変わった可能性 → ボリュームから探し直す
-                    try:
-                        pod = resolve_pod(cfg)
-                        out["pod"] = pod.get("desiredStatus", "UNKNOWN") if pod else "MISSING"
-                    except RunPodError as e:
+                    out["pod"] = pod_status_cached(cfg)
+                except RunPodError as e:
+                    if "429" in str(e):
+                        # 回数制限中にPod探し直しへ行くとAPI呼び出しが雪だるま式に増えるので行かない
                         out["pod"] = "ERROR"
-                        out["pod_error"] = str(e)
+                        out["pod_error"] = ("RunPodが混み合っています（複数PCで同時に使うと起きます）。"
+                                            "数十秒で自動回復するのでそのままお待ちください")
+                    else:
+                        # Podが作り直されてIDが変わった可能性 → ボリュームから探し直す
+                        try:
+                            pod = resolve_pod(cfg)
+                            out["pod"] = pod.get("desiredStatus", "UNKNOWN") if pod else "MISSING"
+                            if pod:
+                                POD_CACHE["t"], POD_CACHE["v"] = time.time(), out["pod"]
+                        except RunPodError as e2:
+                            out["pod"] = "ERROR"
+                            out["pod_error"] = str(e2)
             self._send(200, out)
         elif path == "/api/qc":
             self._send(200, {"available": qc_available(),
