@@ -18,7 +18,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "3.10.6"
+SELF_VERSION = "3.10.7"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -733,7 +733,7 @@ def compose_prompt(p):
             "All speech must be natural, fluent Japanese with native pronunciation — "
             "never Chinese and never English.")
 
-    if mix in ("no_speech", "silent"):
+    if mix in ("no_speech", "silent", "se_only"):
         parts.append(
             "Throughout the entire video, absolutely no one speaks: no dialogue, no narration, "
             "no commentary, no voice-over, no singing, and no human voice of any kind. "
@@ -755,22 +755,31 @@ def compose_prompt(p):
     se = p.get("se", "").strip()
     if se and se.upper() != "N/A":
         soundscape = se
-        if mix in ("no_speech", "silent"):
+        if mix in ("no_speech", "silent", "se_only"):
             soundscape += " (no human vocal sounds of any kind)"
     elif mix == "silent":
         soundscape = "N/A"  # 公式ルール: 完全な無音の指定時のみN/A
-    elif mix == "no_speech":
+    elif mix in ("no_speech", "se_only"):
         soundscape = ("Natural ambient sound that fits the scene and physical sounds of movement. "
                       "No human vocal sounds of any kind.")
     else:
         soundscape = "Natural ambient sound that fits the scene, with physical sounds of movement."
     parts.append("overall_soundscape: " + soundscape)
 
+    # 「N/A」だけだと“指定なし”と解釈されて勝手に歌入りBGMを足されることがある
+    # （→しゃべらせない設定なのに歌声が入る事故）。禁止は明示的に書く
+    NO_MUSIC = ("N/A — absolutely no background music of any kind: "
+                "no songs, no singing, no humming, no melody, no instruments.")
     bgm = p.get("bgm", "").strip()
-    if mix in ("no_bgm", "silent"):
-        music = "N/A"
+    if mix in ("no_bgm", "silent", "se_only"):
+        music = NO_MUSIC
     elif bgm:
         music = bgm + ("（音量は控えめ）" if mix == "bgm_low" else "")
+        if not re.search(r"歌|ボーカル|ヴォーカル|歌詞|歌声|ラップ|合唱|ハミング|vocal|sing|rap|hum",
+                         bgm, re.I):
+            music += " (instrumental only — no vocals, no lyrics, no singing)"
+    elif mix == "no_speech":
+        music = NO_MUSIC  # 声なし指定でBGM欄も空なら、音楽も入れない（歌声の混入防止）
     else:
         music = "N/A"
     parts.append("non_diegetic_music: " + music)
@@ -979,7 +988,7 @@ def plan_generation(params, elements):
                 target = "変更内容は以下の指示文に正確に従う。"
             d_edit = (params.get("dialogue") or "").strip()
             mix_edit = params.get("mix", "auto")
-            if d_edit or mix_edit in ("no_speech", "silent"):
+            if d_edit or mix_edit in ("no_speech", "silent", "se_only"):
                 voice_rule = ""
             else:
                 voice_rule = ("音声の規則: <Video 1>の人物が口を動かしている場合は、その口の動きに合わせて"
@@ -1367,7 +1376,7 @@ def run_generation(params, image_blob, image_name):
         qc = None
         qc_note = ""
         if params.get("qc_check") and str(params.get("dialogue") or "").strip() \
-                and params.get("mix") not in ("no_speech", "silent"):
+                and params.get("mix") not in ("no_speech", "silent", "se_only"):
             qc = qc_verify(local_path, params.get("dialogue"))
         if qc:
             if qc.get("note"):

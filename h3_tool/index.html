@@ -521,11 +521,12 @@
             <option value="auto">おまかせ</option>
             <option value="voice_first">セリフ優先</option>
             <option value="no_speech">🔇 しゃべらせない</option>
+            <option value="se_only">🔊 効果音だけ（声・歌・BGMなし）</option>
             <option value="silent">🔇 完全に静かに</option>
             <option value="bgm_low">BGM控えめ</option>
             <option value="no_bgm">BGMなし</option>
           </select>
-          <div class="hint">勝手にナレーションが入るときは「🔇 しゃべらせない」を。</div>
+          <div class="hint">勝手にナレーションが入るときは「🔇 しゃべらせない」。勝手に歌・BGMまで入るときは「🔊 効果音だけ」（上の効果音欄の音＋環境音だけになります）。</div>
           <label class="lbl">🧪 セリフ自動チェック</label>
           <div id="qcArea"><div class="hint">読み込み中…</div></div>
         </details>
@@ -681,7 +682,7 @@
           <div class="hint">セリフ欄に「<b>ナレーション：</b>その日、街は静かだった」と書くだけ。画面の人物は口パクせず、画面外の声になります。</div>
         </details>
         <details><summary>完全にしゃべらせたくない</summary>
-          <div class="hint">右パネルの「音のバランス」で「<b>🔇 しゃべらせない</b>」を選択。BGMも消したいなら「🔇 完全に静かに」。</div>
+          <div class="hint">右パネルの「音のバランス」で「<b>🔇 しゃべらせない</b>」を選択。歌・BGMも消して効果音と環境音だけ残すなら「<b>🔊 効果音だけ</b>」、全部消すなら「🔇 完全に静かに」。</div>
         </details>
         <details><summary>勝手に変な言語（中国語など）をしゃべる</summary>
           <div class="hint">このAIは「口が動いている映像」を見ると必ず声を当てようとするため、指示がないと謎の言語になることがあります。対策：①セリフ欄に内容を指定する ②「🔇しゃべらせない」を選ぶ ③部分編集なら「🔊元動画の音声をそのまま使う」をON（最強）。</div>
@@ -1385,7 +1386,8 @@ function applyGPTs(text) {
 
   const mix = get('音バランス', '音のバランス') || '';
   if (mix) {
-    const mv = /完全|静か/.test(mix) ? 'silent' : /しゃべらせない|声なし|ナレーションなし/.test(mix) ? 'no_speech'
+    const mv = /完全|静か/.test(mix) ? 'silent' : /効果音(だけ|のみ)|SE(だけ|のみ)/.test(mix) ? 'se_only'
+      : /しゃべらせない|声なし|ナレーションなし/.test(mix) ? 'no_speech'
       : /セリフ優先/.test(mix) ? 'voice_first' : /BGM控えめ/.test(mix) ? 'bgm_low' : /BGMなし/.test(mix) ? 'no_bgm' : 'auto';
     $('mix').value = mv; applied.push('音:' + mix);
   }
