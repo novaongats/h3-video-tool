@@ -18,7 +18,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SELF_VERSION = "3.10.5"
+SELF_VERSION = "3.10.6"
 UPDATE_REPO_RAW = "https://raw.githubusercontent.com/novaongats/h3-video-tool/main"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -115,7 +115,9 @@ def http_json(url, method="GET", headers=None, body=None, timeout=30):
 
 # ---------- RunPod API ----------
 
-RUNPOD_BASE = "https://rest.runpod.io/v1"
+# 2026-11-15にRunPodが旧API(rest.runpod.io/v1)を廃止・ドメインごと削除。
+# 以降はv2(api.runpod.io/v2)のみ。APIキーはそのまま使える
+RUNPOD_BASE = "https://api.runpod.io/v2"
 
 
 class RunPodError(Exception):
@@ -184,6 +186,28 @@ POD_IMAGE = "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404"
 POD_GPUS = ["NVIDIA H100 80GB HBM3", "NVIDIA H200"]
 POD_GPU = POD_GPUS[0]
 POD_START_CMD = ["bash", "-c", "(sleep 15 && /workspace/start_comfyui.sh) & exec /start.sh"]
+POD_DATACENTER = "AP-JP-1"  # Network Volumeと同じ日本DC
+
+
+def pod_state(p):
+    """Podの状態を返す。v2は status、旧v1は desiredStatus（両対応）"""
+    if not p:
+        return "MISSING"
+    return p.get("status") or p.get("desiredStatus") or "UNKNOWN"
+
+
+def pod_has_volume(p):
+    """このツールの共有Volumeが繋がったPodか（v2は mounts.network、旧v1は networkVolumeId）"""
+    vols = [x.get("volumeId") for x in ((p.get("mounts") or {}).get("network") or [])
+            if isinstance(x, dict)]
+    if p.get("networkVolumeId"):
+        vols.append(p.get("networkVolumeId"))
+    return NETWORK_VOLUME_ID in vols
+
+
+def pod_action(cfg, pid, action):
+    """Podの起動/停止（v2では /start /stop が /action に統合された）"""
+    return runpod_call(cfg, f"/pods/{pid}/action", method="POST", body={"action": action})
 
 
 def resolve_pod(cfg):
@@ -191,11 +215,11 @@ def resolve_pod(cfg):
     見つかればそのPodのid/URLを返し、config.jsonも更新する。無ければNone。"""
     d = runpod_call(cfg, "/pods")
     pods = d if isinstance(d, list) else d.get("pods", [])
-    ours = [p for p in pods if p.get("networkVolumeId") == NETWORK_VOLUME_ID]
+    ours = [p for p in pods if pod_has_volume(p)]
     if not ours:
         return None
     # RUNNINGを優先、無ければ先頭
-    ours.sort(key=lambda p: 0 if p.get("desiredStatus") == "RUNNING" else 1)
+    ours.sort(key=lambda p: 0 if pod_state(p) == "RUNNING" else 1)
     pod = ours[0]
     pid = pod["id"]
     if cfg.get("pod_id") != pid:
@@ -208,22 +232,35 @@ def resolve_pod(cfg):
 def create_replacement_pod(cfg):
     """空きのある別マシンに新しいPodを作る。古いPodは削除する。"""
     old_id = cfg.get("pod_id")
-    body = {
-        "name": "minimax-h3-pod-auto",
-        "imageName": POD_IMAGE,
-        "gpuTypeIds": POD_GPUS,
-        "gpuCount": 1,
-        "cloudType": "SECURE",
-        "networkVolumeId": NETWORK_VOLUME_ID,
-        "volumeMountPath": "/workspace",
-        "containerDiskInGb": 30,
-        "ports": ["8888/http", "8188/http", "22/tcp"],
-        "dockerStartCmd": POD_START_CMD,
-    }
-    new_pod = runpod_call(cfg, "/pods", method="POST", body=body)
+    # v2はGPUのフォールバック指定（複数候補）ができないので、こちらで順に試す
+    new_pod, last_err = None, None
+    for gpu_id in POD_GPUS:
+        body = {
+            "name": "minimax-h3-pod-auto",
+            "image": POD_IMAGE,
+            "gpu": {"id": gpu_id, "count": 1},
+            "cloud": "SECURE",
+            "dataCenterIds": [POD_DATACENTER],
+            "disk": 30,
+            "ports": ["8888/http", "8188/http", "22/tcp"],
+            "mounts": {"network": [{"volumeId": NETWORK_VOLUME_ID, "path": "/workspace"}]},
+            "cmd": POD_START_CMD,
+        }
+        try:
+            new_pod = runpod_call(cfg, "/pods", method="POST", body=body)
+            if new_pod.get("id"):
+                break
+            new_pod = None
+        except RunPodError as e:
+            last_err = e
+            low = str(e).lower()
+            # GPU在庫切れ系なら次の候補GPUを試す。それ以外のエラーは即座に報告
+            if not any(k in low for k in ("free gpu", "no gpu", "not available",
+                                          "no instances", "unavailable", "stock")):
+                raise
+    if not new_pod:
+        raise last_err or RunPodError("Podの作り直しに失敗しました")
     new_id = new_pod.get("id")
-    if not new_id:
-        raise RunPodError("Podの作り直しに失敗しました: " + json.dumps(new_pod)[:200])
     cfg["pod_id"] = new_id
     cfg["comfy_url"] = f"https://{new_id}-8188.proxy.runpod.net"
     save_config(cfg)
@@ -263,7 +300,7 @@ def pod_status(cfg):
     if not cfg.get("pod_id"):
         raise RunPodError("Pod未設定")  # 呼び出し側でresolve_podにフォールバックする
     d = runpod_call(cfg, f"/pods/{cfg['pod_id']}")
-    return d.get("desiredStatus", "UNKNOWN")
+    return pod_state(d)
 
 
 # Pod状態の20秒キャッシュ。画面は数秒おきに状態を聞いてくるが、
@@ -497,19 +534,23 @@ def ensure_pod_running(cfg):
             "【一時的に起動できません】" + rate_limit_msg()
             + "回復後にもう一度「生成」を押してください。")
     pod = resolve_pod(cfg)  # 他のPCがPodを作り直していても自動で追従する
-    st = pod.get("desiredStatus") if pod else "MISSING"
+    st = pod_state(pod)
     if st != "RUNNING":
         set_job(state="starting_pod", message="GPUサーバーを起動しています…（1〜2分）")
         started = False
-        if pod:
+        if pod and st in ("STARTING", "PROVISIONING", "CREATED"):
+            started = True  # 他のPCが起動操作済み。立ち上がりを待つだけでよい
+        elif pod:
             attempts = 3
             for i in range(attempts):
                 try:
-                    runpod_call(cfg, f"/pods/{cfg['pod_id']}/start", method="POST")
+                    pod_action(cfg, cfg["pod_id"], "start")
                     started = True
                     break
                 except RunPodError as e:
-                    if "not enough free GPUs" not in str(e):
+                    low = str(e).lower()
+                    if not any(k in low for k in ("free gpu", "no gpu", "not available",
+                                                  "unavailable", "stock")):
                         raise
                     if i < attempts - 1:
                         set_job(state="starting_pod",
@@ -1391,7 +1432,7 @@ def run_generation(params, image_blob, image_name):
             else:
                 set_job(state="stopping_pod", message="サーバーを自動停止しています…", video=local_name)
                 try:
-                    runpod_call(cfg, f"/pods/{cfg['pod_id']}/stop", method="POST")
+                    pod_action(cfg, cfg["pod_id"], "stop")
                 except Exception:
                     pass
 
@@ -1500,7 +1541,7 @@ class Handler(BaseHTTPRequestHandler):
                                 # Podが作り直されてIDが変わった可能性 → ボリュームから探し直す
                                 try:
                                     pod = resolve_pod(cfg)
-                                    st = pod.get("desiredStatus", "UNKNOWN") if pod else "MISSING"
+                                    st = pod_state(pod)
                                     if pod:
                                         POD_CACHE["t"], POD_CACHE["v"] = now, st
                                 except RunPodError as e2:
@@ -1578,7 +1619,7 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     # キーの有効性確認を兼ねて、共有ボリュームから現在のPodを自動発見する
                     pod = resolve_pod(cfg)
-                    st = pod.get("desiredStatus", "UNKNOWN") if pod else "MISSING"
+                    st = pod_state(pod)
                 except RunPodError as e:
                     self._send(400, {"error": str(e)})
                     return
@@ -1648,7 +1689,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise
                 except Exception:
                     pass  # キューを確認できない場合（エンジン起動前など）は通常どおり停止できる
-                runpod_call(cfg, f"/pods/{cfg['pod_id']}/stop", method="POST")
+                pod_action(cfg, cfg["pod_id"], "stop")
                 self._send(200, {"ok": True})
             elif path == "/api/elements":
                 # エレメント登録: {name, type, memo, images: [{name, b64}, ...]}

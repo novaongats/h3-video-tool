@@ -1590,7 +1590,7 @@ async function poll() {
     else if (pod === 'RUNNING') { led.className = 'led on'; txt.textContent = '起動中（課金中 約500円/時）'; }
     else if (pod === 'EXITED') { led.className = 'led off'; txt.textContent = '停止中（課金なし）'; }
     else if (pod === 'NO_KEY') { txt.textContent = 'APIキー未設定（設定ページへ）'; }
-    else if (pod === 'STARTING') { led.className = 'led busy'; txt.textContent = '起動の準備中…'; }
+    else if (pod === 'STARTING' || pod === 'PROVISIONING' || pod === 'CREATED') { led.className = 'led busy'; txt.textContent = '起動の準備中…'; }
     else if (pod === 'MISSING') { led.className = 'led off'; txt.textContent = '⚠️ GPUサーバーが見つかりません'; }
     else if (pod === 'ERROR') { led.className = 'led off'; txt.textContent = '⚠️ 状態を確認できません'; }
     else { led.className = 'led busy'; txt.textContent = pod; }
